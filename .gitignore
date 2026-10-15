@@ -1,0 +1,33 @@
+# === Unity 生成物（可再生成，绝不提交）===
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Ll]ogs/
+[Uu]serSettings/
+[Mm]emoryCaptures/
+CrashReports/
+.utmp/
+_Recovery/
+
+# === 构建产物 ===
+[Bb]uild/
+[Bb]uild_Output/
+*.apk
+*.aab
+*.unitypackage
+
+# === IDE / 编辑器 ===
+.vs/
+.idea/
+*.csproj
+*.sln
+*.suo
+*.user
+
+# === 操作系统 ===
+.DS_Store
+Thumbs.db
+*.stackdump
+
+# === Unity 崩溃报告 ===
+sysinfo.txt
