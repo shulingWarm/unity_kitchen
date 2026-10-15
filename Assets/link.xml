@@ -1,0 +1,6 @@
+<linker>
+  <!-- 保留物理模块：地面/墙/收集物都是运行时 CreatePrimitive 创建的，
+       构建扫描看不到对 MeshCollider/BoxCollider 的引用，Strip Engine Code
+       会把物理模块裁掉，导致真机上球穿过地板（编辑器不裁剪所以无此问题）。 -->
+  <assembly fullname="UnityEngine.PhysicsModule" preserve="all"/>
+</linker>

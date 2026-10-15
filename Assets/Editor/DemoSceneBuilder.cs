@@ -36,17 +36,7 @@ namespace RollABallEditorTools
             var matPlayer = GetOrCreateMaterial("Assets/Materials/M_Player.mat", new Color(0.25f, 0.55f, 0.95f));
             var matPickup = GetOrCreateMaterial("Assets/Materials/M_Pickup.mat", new Color(0.95f, 0.8f, 0.15f));
 
-            // ---- 地面 ----
-            var ground = GameObject.CreatePrimitive(PrimitiveType.Plane);
-            ground.name = "Ground";
-            ground.transform.localScale = new Vector3(2f, 1f, 2f); // 20 x 20
-            ground.GetComponent<Renderer>().sharedMaterial = matGround;
-
-            // ---- 围墙（防止球滚出边界）----
-            BuildWall("Wall_N", new Vector3(0f, 0.5f, 10.25f), new Vector3(21.5f, 1f, 0.5f), matWall);
-            BuildWall("Wall_S", new Vector3(0f, 0.5f, -10.25f), new Vector3(21.5f, 1f, 0.5f), matWall);
-            BuildWall("Wall_E", new Vector3(10.25f, 0.5f, 0f), new Vector3(0.5f, 1f, 21.5f), matWall);
-            BuildWall("Wall_W", new Vector3(-10.25f, 0.5f, 0f), new Vector3(0.5f, 1f, 21.5f), matWall);
+            // ---- 地面 / 墙 / 收集物：运行时由 MapLoader 按地图数据生成，场景里不再硬编码 ----
 
             // ---- 玩家小球 ----
             var player = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -56,20 +46,6 @@ namespace RollABallEditorTools
             var rb = player.AddComponent<Rigidbody>();
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             player.AddComponent<PlayerController>();
-
-            // ---- 收集物（8 个，环形分布）----
-            for (int i = 0; i < 8; i++)
-            {
-                float a = i * Mathf.PI * 2f / 8f;
-                var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "Pickup_" + i;
-                cube.tag = "Pickup";
-                cube.transform.position = new Vector3(Mathf.Cos(a) * 5.5f, 0.5f, Mathf.Sin(a) * 5.5f);
-                cube.transform.localScale = Vector3.one * 0.5f;
-                cube.GetComponent<Renderer>().sharedMaterial = matPickup;
-                cube.GetComponent<BoxCollider>().isTrigger = true;
-                cube.AddComponent<PickupSpin>();
-            }
 
             // ---- 相机 ----
             var camGO = Camera.main.gameObject;
@@ -82,6 +58,23 @@ namespace RollABallEditorTools
             var pc = player.GetComponent<PlayerController>();
             pc.followCamera = camGO.GetComponent<Camera>();
             pc.moveSpeed = 8f;
+
+            // ---- 关卡数据（导入 maps/*.txt → Assets/Maps/*.asset，运行时由 MapLoader 生成）----
+            var mapAsset = MapImporter.ImportAllAndGetDefault();
+            if (mapAsset == null)
+            {
+                EditorUtility.DisplayDialog("Roll-a-Ball",
+                    "maps/ 下没有可导入的地图（需要至少一个 map1.txt），关卡未生成。", "知道了");
+                return;
+            }
+            var levelGO = new GameObject("Level");
+            var loader = levelGO.AddComponent<MapLoader>();
+            loader.map = mapAsset;
+            loader.player = player.transform;
+            loader.followCamera = camGO.GetComponent<Camera>();
+            loader.groundMaterial = matGround;
+            loader.wallMaterial = matWall;
+            loader.pickupMaterial = matPickup;
 
             // ---- UI ----
             BuildUI(player);
@@ -225,15 +218,6 @@ namespace RollABallEditorTools
         }
 
         // ---------------- 资源工具 ----------------
-        private static void BuildWall(string name, Vector3 pos, Vector3 scale, Material mat)
-        {
-            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            wall.name = name;
-            wall.transform.position = pos;
-            wall.transform.localScale = scale;
-            wall.GetComponent<Renderer>().sharedMaterial = mat;
-        }
-
         private static Material GetOrCreateMaterial(string path, Color color)
         {
             var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
