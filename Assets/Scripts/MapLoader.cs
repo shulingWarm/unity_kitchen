@@ -1,10 +1,12 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace RollABall
 {
     /// <summary>
     /// 游戏启动（Awake）时按 MapData 实例化关卡：
-    /// 整块地面 + 逐格墙体 + 可吃小球，并把玩家放到出生点、让相机取景适配地图大小。
+    /// 整块地面 + 逐格墙体 + 木箱（wN：木色立方体 + 顶面图片）+ 可吃小球，
+    /// 并把玩家放到出生点、让相机取景适配地图大小。
     /// 场景里只挂这一个组件，不再硬编码任何关卡内容。
     /// </summary>
     public class MapLoader : MonoBehaviour
@@ -18,6 +20,10 @@ namespace RollABall
 
         public float wallHeight = 1f;
         public float pickupScale = 0.6f;
+        public float boxSize = 1.6f;    // 木箱边长；格子 2.0 留 0.4 缝，球直径 1.0 钻不进，碰撞用箱子自身即可
+
+        private string[,] cells;         // 预拆分的 token 网格
+        private Dictionary<string, Material> boxTopMaterials;
 
         private void Awake()
         {
@@ -27,13 +33,38 @@ namespace RollABall
                 return;
             }
 
+            ParseCells();
+            BuildBoxMaterialLookup();
+
             BuildGround();
-            BuildWalls();
+            BuildObstacles();
             BuildPickups();
             PlacePlayer();
             FrameCamera();
 
-            Debug.Log($"[MapLoader] 地图加载完成：{map.rows}x{map.cols}，小球 {map.CountPickups()} 个，出生点 (r{map.spawnCell.x}, c{map.spawnCell.y})");
+            Debug.Log($"[MapLoader] 地图加载完成：{map.rows}x{map.cols}，小球 {map.CountPickups()} 个，" +
+                      $"出生点 (r{map.spawnCell.x}, c{map.spawnCell.y})");
+        }
+
+        private void ParseCells()
+        {
+            cells = new string[map.rows, map.cols];
+            for (int r = 0; r < map.rows; r++)
+            {
+                string[] toks = map.SplitRow(r);
+                for (int c = 0; c < map.cols; c++)
+                    cells[r, c] = c < toks.Length ? toks[c] : "1";
+            }
+        }
+
+        private void BuildBoxMaterialLookup()
+        {
+            boxTopMaterials = new Dictionary<string, Material>();
+            if (map.blockTypes == null || map.blockMaterials == null) return;
+
+            int n = Mathf.Min(map.blockTypes.Length, map.blockMaterials.Length);
+            for (int i = 0; i < n; i++)
+                boxTopMaterials[map.blockTypes[i]] = map.blockMaterials[i];
         }
 
         private void BuildGround()
@@ -46,25 +77,58 @@ namespace RollABall
             ground.GetComponent<Renderer>().sharedMaterial = groundMaterial;
         }
 
-        private void BuildWalls()
+        private void BuildObstacles()
         {
             var wallsRoot = new GameObject("Walls");
             wallsRoot.transform.SetParent(transform, false);
+            var boxesRoot = new GameObject("Boxes");
+            boxesRoot.transform.SetParent(transform, false);
 
             for (int r = 0; r < map.rows; r++)
             {
                 for (int c = 0; c < map.cols; c++)
                 {
-                    if (!map.IsWall(r, c)) continue;
-
-                    var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    wall.name = $"Wall_{r}_{c}";
-                    wall.transform.SetParent(wallsRoot.transform, false);
-                    wall.transform.localScale = new Vector3(map.cellSize, wallHeight, map.cellSize);
-                    wall.transform.position = map.CellToWorld(r, c) + Vector3.up * (wallHeight * 0.5f);
-                    wall.GetComponent<Renderer>().sharedMaterial = wallMaterial;
+                    string t = cells[r, c];
+                    if (t == "1") BuildWallCell(wallsRoot.transform, r, c);
+                    else if (t.Length > 1 && t[0] == 'w') BuildBox(boxesRoot.transform, r, c, t);
                 }
             }
+        }
+
+        private void BuildWallCell(Transform parent, int r, int c)
+        {
+            var wall = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            wall.name = $"Wall_{r}_{c}";
+            wall.transform.SetParent(parent, false);
+            wall.transform.localScale = new Vector3(map.cellSize, wallHeight, map.cellSize);
+            wall.transform.position = map.CellToWorld(r, c) + Vector3.up * (wallHeight * 0.5f);
+            wall.GetComponent<Renderer>().sharedMaterial = wallMaterial;
+        }
+
+        private void BuildBox(Transform parent, int r, int c, string token)
+        {
+            // 木色箱体
+            var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            box.name = $"Box_{token}_{r}_{c}";
+            box.transform.SetParent(parent, false);
+            box.transform.localScale = Vector3.one * boxSize;
+            box.transform.position = map.CellToWorld(r, c) + Vector3.up * (boxSize * 0.5f);
+            box.GetComponent<Renderer>().sharedMaterial =
+                map.blockSideMaterial != null ? map.blockSideMaterial : wallMaterial;
+
+            // 顶面图片：Quad 盖在顶面（抬高 0.002 防 Z-fighting），Quad 的碰撞体去掉
+            Material topMat;
+            if (!boxTopMaterials.TryGetValue(token, out topMat) || topMat == null)
+            {
+                Debug.LogWarning($"[MapLoader] {token} 缺少顶面材质，回退用侧面材质");
+                topMat = map.blockSideMaterial;
+            }
+            var top = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(top.GetComponent<Collider>());
+            top.GetComponent<Renderer>().sharedMaterial = topMat;
+            top.transform.SetParent(box.transform, false);
+            top.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // Quad 默认朝 -Z，转成朝上
+            top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
         }
 
         private void BuildPickups()
@@ -76,7 +140,7 @@ namespace RollABall
             {
                 for (int c = 0; c < map.cols; c++)
                 {
-                    if (map.Get(r, c) != 'x') continue;
+                    if (cells[r, c] != "x") continue;
 
                     var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
                     cube.name = $"Pickup_{r}_{c}";

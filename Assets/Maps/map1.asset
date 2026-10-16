@@ -15,15 +15,25 @@ MonoBehaviour:
   rows: 10
   cols: 10
   cellSize: 2
-  grid:
-  - 0000000000
-  - 0000000000
-  - 00000x0000
-  - 0001001000
-  - 0001001000
-  - 0001001000
-  - 0001001000
-  - 0001001000
-  - 000000000x
-  - 0000000000
-  spawnCell: {x: 4, y: 4}
+  gridRows:
+  - 0 0 0 0 0 0 0 0 0 0
+  - 0 0 0 0 0 0 0 x 0 0
+  - 0 0 0 1 0 0 x 1 x 0
+  - 0 w1 0 1 0 0 0 1 x 0
+  - 0 0 0 1 0 0 x 1 x 0
+  - 0 0 0 1 0 x 0 1 x 0
+  - 0 w2 0 1 x 0 0 1 x 0
+  - 0 0 0 0 0 x 0 0 x 0
+  - 0 0 0 0 0 0 x 0 x 0
+  - 0 0 0 0 0 0 0 x 0 0
+  blockTypes:
+  - w1
+  - w2
+  blockImages:
+  - cube_images/tomato.png
+  - cube_images/corn.png
+  blockMaterials:
+  - {fileID: 2100000, guid: 0f5c28c8de8ea1840b692aa74ac7ea37, type: 2}
+  - {fileID: 2100000, guid: 193c56bd8089aa64c84eba801c6da695, type: 2}
+  blockSideMaterial: {fileID: 2100000, guid: 04391d8163760f848af2aa73634293fd, type: 2}
+  spawnCell: {x: 2, y: 4}
