@@ -41,19 +41,22 @@ namespace RollABall
 
         private void BuildVisuals()
         {
-            baseRect = CreateCircle("JoystickBase", BaseSize, transform);
+            // 底座锚父级左下角：anchoredPosition = 父级本地坐标（绝对落点定位用）
+            baseRect = CreateCircle("JoystickBase", BaseSize, transform, Vector2.zero);
             baseImg = baseRect.GetComponent<Image>();
-            handleRect = CreateCircle("JoystickHandle", HandleSize, baseRect);
+            // 手柄锚父级（底座）中心：anchoredPosition = 相对底座中心的拖拽偏移
+            handleRect = CreateCircle("JoystickHandle", HandleSize, baseRect, new Vector2(0.5f, 0.5f));
             handleImg = handleRect.GetComponent<Image>();
         }
 
-        private RectTransform CreateCircle(string name, float size, Transform parent)
+        private RectTransform CreateCircle(string name, float size, Transform parent, Vector2 anchor)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             go.transform.SetParent(parent, false);
             var rt = (RectTransform)go.transform;
             rt.sizeDelta = new Vector2(size, size);
-            rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.anchorMin = rt.anchorMax = anchor;
+            rt.pivot = new Vector2(0.5f, 0.5f);
             var img = go.GetComponent<Image>();
             img.sprite = circleSprite;
             img.raycastTarget = false;   // 视觉不参与点击，输入全部由热区接收
