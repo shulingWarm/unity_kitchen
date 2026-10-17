@@ -191,6 +191,9 @@ namespace RollABallEditorTools
             var pc = player.GetComponent<PlayerController>();
             pc.scoreText = scoreGO.GetComponent<Text>();
             pc.winText = winGO.GetComponent<Text>();
+
+            // 倒计时条（右下角，UI 由组件运行时自建）
+            new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
         }
 
         private static GameObject CreateText(Transform parent, string name, string content, Font font, int size, Color color)
