@@ -14,7 +14,7 @@ namespace RollABallEditorTools
     {
         private const string ScenePath = "Assets/Scenes/DemoScene.unity";
 
-        [MenuItem("Tools/Roll-a-Ball/3 - 给场景添加倒计时条")]
+        [MenuItem("Tools/Roll-a-Ball/4 - 给场景添加倒计时条")]
         public static void AddTimerToDemoScene()
         {
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);

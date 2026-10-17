@@ -16,7 +16,7 @@ namespace RollABallEditorTools
         private const string TomatoPath = "Assets/cube_images/tomato.png";
         private const string CornPath = "Assets/cube_images/corn.png";
 
-        [MenuItem("Tools/Roll-a-Ball/4 - 给场景添加订单卡信息牌")]
+        [MenuItem("Tools/Roll-a-Ball/5 - 给场景添加订单卡信息牌")]
         public static void AddOrderCardsToDemoScene()
         {
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
