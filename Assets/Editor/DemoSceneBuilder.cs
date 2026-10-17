@@ -194,6 +194,10 @@ namespace RollABallEditorTools
 
             // 倒计时条（右下角，UI 由组件运行时自建）
             new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
+
+            // 订单卡信息牌（左上角，UI 由组件运行时自建，并注入项目菜品图片）
+            var orderUi = new GameObject("OrderCardsUI", typeof(OrderCardsUI)).GetComponent<OrderCardsUI>();
+            OrderCardsScenePatcher.AssignIcons(orderUi);
         }
 
         private static GameObject CreateText(Transform parent, string name, string content, Font font, int size, Color color)
