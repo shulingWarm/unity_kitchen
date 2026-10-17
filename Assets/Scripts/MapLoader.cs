@@ -157,7 +157,8 @@ namespace RollABall
 
         private void PlacePlayer()
         {
-            player.transform.position = map.CellToWorld(map.spawnCell.x, map.spawnCell.y) + Vector3.up * 0.5f;
+            // 物理根在脚底（胶囊体从根向上伸展），略微抬离地面让物理自然落定
+            player.transform.position = map.CellToWorld(map.spawnCell.x, map.spawnCell.y) + Vector3.up * 0.1f;
         }
 
         // 相机偏移随地图尺寸缩放：10x10 地图 ≈ 旧版 (0,10,-8) 的取景

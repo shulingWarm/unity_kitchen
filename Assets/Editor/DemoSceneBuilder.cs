@@ -1,6 +1,7 @@
 using System.IO;
 using RollABall;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -33,19 +34,40 @@ namespace RollABallEditorTools
             // ---- 材质 ----
             var matGround = GetOrCreateMaterial("Assets/Materials/M_Ground.mat", new Color(0.55f, 0.75f, 0.55f));
             var matWall   = GetOrCreateMaterial("Assets/Materials/M_Wall.mat", new Color(0.65f, 0.65f, 0.65f));
-            var matPlayer = GetOrCreateMaterial("Assets/Materials/M_Player.mat", new Color(0.25f, 0.55f, 0.95f));
             var matPickup = GetOrCreateMaterial("Assets/Materials/M_Pickup.mat", new Color(0.95f, 0.8f, 0.15f));
 
             // ---- 地面 / 墙 / 收集物：运行时由 MapLoader 按地图数据生成，场景里不再硬编码 ----
 
-            // ---- 玩家小球 ----
-            var player = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            player.name = "Player";
-            player.transform.position = new Vector3(0f, 0.5f, 0f);
-            player.GetComponent<Renderer>().sharedMaterial = matPlayer;
+            // ---- 玩家（人形角色）：物理胶囊根节点 + X Bot 模型实例 ----
+            var player = new GameObject("Player");
+            player.transform.position = new Vector3(0f, 0.1f, 0f);
+            var cap = player.AddComponent<CapsuleCollider>();
+            cap.height = 1.8f;
+            cap.radius = 0.3f;
+            cap.center = new Vector3(0f, 0.9f, 0f);
             var rb = player.AddComponent<Rigidbody>();
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             player.AddComponent<PlayerController>();
+
+            // 模型子节点：只负责外观与朝向，物理根不旋转
+            var modelPivot = new GameObject("Model");
+            modelPivot.transform.SetParent(player.transform, false);
+            EnsureMixamoImportSettings();
+            Animator botAnimator = null;
+            var botPrefab = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/Models/X Bot.fbx");
+            if (botPrefab != null)
+            {
+                var bot = (GameObject)PrefabUtility.InstantiatePrefab(botPrefab, modelPivot.transform);
+                bot.transform.localPosition = Vector3.zero;
+                bot.transform.localRotation = Quaternion.identity;
+                CenterModelOnPivot(bot);   // 身体包围盒中心对齐旋转轴、脚底贴地，防转身公转
+                botAnimator = bot.GetComponent<Animator>();
+            }
+            else
+            {
+                Debug.LogWarning("[DemoSceneBuilder] 找不到 Assets/Models/X Bot.fbx，玩家没有外观（物理胶囊仍在）");
+            }
+            var animatorCtrl = GetOrCreatePlayerAnimator();
 
             // ---- 相机 ----
             var camGO = Camera.main.gameObject;
@@ -57,7 +79,14 @@ namespace RollABallEditorTools
             // ---- 玩家脚本引用 ----
             var pc = player.GetComponent<PlayerController>();
             pc.followCamera = camGO.GetComponent<Camera>();
-            pc.moveSpeed = 8f;
+            pc.moveSpeed = 6f;
+            pc.animator = botAnimator;
+            pc.modelPivot = modelPivot.transform;
+            if (botAnimator != null)
+            {
+                botAnimator.runtimeAnimatorController = animatorCtrl;
+                botAnimator.applyRootMotion = false;   // Mixamo 动画带位移曲线，位置必须由物理根驱动
+            }
 
             // ---- 关卡数据（导入 maps/*.txt → Assets/Maps/*.asset，运行时由 MapLoader 生成）----
             var mapAsset = MapImporter.ImportAllAndGetDefault();
@@ -187,6 +216,46 @@ namespace RollABallEditorTools
                 new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero);
 
+            // 抓取按钮（右下，与摇杆待机位同高；目前仅展示，无点击逻辑）
+            var grabGO = new GameObject("GrabButton",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            grabGO.transform.SetParent(canvasGO.transform, false);
+            SetRect(grabGO.GetComponent<RectTransform>(),
+                new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0.5f),
+                new Vector2(160f, 160f), new Vector2(-160f, 185f));
+            var grabImg = grabGO.GetComponent<Image>();
+            grabImg.sprite = GetOrCreateRingSprite();
+            grabImg.color = new Color(1f, 1f, 1f, 0.5f);   // 圆环 50% 透明
+            grabImg.raycastTarget = true;
+
+            // 中心图标（用户提供的 drag.png，50% 透明；缺失时只显示圆环不阻塞建场景）
+            const string GrabIconPath = "Assets/UI/button_icon/drag.png";
+            if (File.Exists(GrabIconPath))
+            {
+                ForceSpriteImport(GrabIconPath);
+                var iconSprite = AssetDatabase.LoadAssetAtPath<Sprite>(GrabIconPath);
+                if (iconSprite != null)
+                {
+                    var iconGO = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                    iconGO.transform.SetParent(grabGO.transform, false);
+                    var iconRt = (RectTransform)iconGO.transform;
+                    iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0.5f, 0.5f);
+                    iconRt.sizeDelta = new Vector2(104f, 104f);   // 外径 160 的 65%
+                    var iconImg = iconGO.GetComponent<Image>();
+                    iconImg.sprite = iconSprite;
+                    iconImg.color = new Color(1f, 1f, 1f, 0.5f);   // 图标 50% 透明
+                    iconImg.raycastTarget = false;
+                }
+                else
+                {
+                    Debug.LogWarning($"[DemoSceneBuilder] {GrabIconPath} 导入后拿不到 Sprite，抓取按钮只有圆环");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[DemoSceneBuilder] 找不到 {GrabIconPath}，抓取按钮只有圆环");
+            }
+
             // 玩家脚本挂 UI 引用
             var pc = player.GetComponent<PlayerController>();
             pc.scoreText = scoreGO.GetComponent<Text>();
@@ -224,6 +293,121 @@ namespace RollABallEditorTools
             rt.anchoredPosition = pos;
         }
 
+        // ---------------- 人形角色工具 ----------------
+
+        /// <summary>
+        /// 把模型可见身体对中到旋转轴上：渲染包围盒的 XZ 中心对齐模型根，
+        /// 脚底（包围盒下沿）对齐根平面。否则转身时身体会绕轴心公转。
+        /// </summary>
+        private static void CenterModelOnPivot(GameObject modelRoot)
+        {
+            var renderers = modelRoot.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return;
+
+            var bounds = renderers[0].bounds;
+            foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+
+            var rootPos = modelRoot.transform.position;
+            var offsetXZ = bounds.center - rootPos;
+            float footY = bounds.min.y - rootPos.y;
+
+            var p = modelRoot.transform.localPosition;
+            modelRoot.transform.localPosition =
+                new Vector3(p.x - offsetXZ.x, p.y - footY, p.z - offsetXZ.z);
+        }
+
+        /// Mixamo FBX 导入设置：角色建 Humanoid Avatar；两个动画设 Humanoid 肌肉空间（同骨架自动重定向）
+        private static void EnsureMixamoImportSettings()
+        {
+            const string botPath = "Assets/Models/X Bot.fbx";
+            if (AssetImporter.GetAtPath(botPath) is ModelImporter bot &&
+                bot.animationType != ModelImporterAnimationType.Human)
+            {
+                bot.animationType = ModelImporterAnimationType.Human;
+                bot.SaveAndReimport();
+            }
+
+            foreach (string animPath in new[] { "Assets/Models/Idle.fbx", "Assets/Models/Walking.fbx" })
+            {
+                if (AssetImporter.GetAtPath(animPath) is ModelImporter imp)
+                {
+                    bool dirty = false;
+
+                    if (imp.animationType != ModelImporterAnimationType.Human)
+                    {
+                        imp.animationType = ModelImporterAnimationType.Human;   // Humanoid 肌肉空间，同骨架自动重定向
+                        dirty = true;
+                    }
+
+                    // 剪辑循环：Mixamo 导入默认 Loop Time 关闭，播完一遍会定格在末帧
+                    // 注意：clipAnimations 在未被手动编辑过时返回空数组，必须以 defaultClipAnimations 为底稿
+                    var clips = imp.clipAnimations;
+                    bool seeded = false;
+                    if (clips == null || clips.Length == 0)
+                    {
+                        clips = imp.defaultClipAnimations;
+                        seeded = clips.Length > 0;
+                    }
+
+                    bool loopChanged = false;
+                    foreach (var clip in clips)
+                    {
+                        if (!clip.loopTime) { clip.loopTime = true; loopChanged = true; }
+                    }
+                    if (loopChanged || seeded)
+                    {
+                        imp.clipAnimations = clips;
+                        dirty = true;
+                        Debug.Log($"[DemoSceneBuilder] {Path.GetFileName(animPath)} 已设置 {clips.Length} 个剪辑为循环播放");
+                    }
+
+                    if (dirty) imp.SaveAndReimport();
+                }
+            }
+        }
+
+        /// 程序化生成 Animator 状态机：MoveSpeed 参数驱动 Idle <-> Walk
+        private static RuntimeAnimatorController GetOrCreatePlayerAnimator()
+        {
+            const string path = "Assets/Animations/PlayerAnimator.controller";
+            var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+            if (existing != null) return existing;
+
+            EnsureFolder("Assets/Animations");
+            var ctrl = AnimatorController.CreateAnimatorControllerAtPath(path);
+            ctrl.AddParameter("MoveSpeed", AnimatorControllerParameterType.Float);
+            var root = ctrl.layers[0].stateMachine;
+
+            var idle = root.AddState("Idle");
+            idle.motion = LoadClipFromFbx("Assets/Models/Idle.fbx");
+            var walk = root.AddState("Walk");
+            walk.motion = LoadClipFromFbx("Assets/Models/Walking.fbx");
+            root.defaultState = idle;
+
+            var toWalk = idle.AddTransition(walk);
+            toWalk.hasExitTime = false;
+            toWalk.duration = 0.15f;
+            toWalk.AddCondition(AnimatorConditionMode.Greater, 0.1f, "MoveSpeed");
+
+            var toIdle = walk.AddTransition(idle);
+            toIdle.hasExitTime = false;
+            toIdle.duration = 0.15f;
+            toIdle.AddCondition(AnimatorConditionMode.Less, 0.1f, "MoveSpeed");
+
+            AssetDatabase.SaveAssets();
+            return ctrl;
+        }
+
+        /// 取 FBX 里的动画剪辑（Mixamo 的剪辑名通常是 "mixamo.com"）
+        private static AnimationClip LoadClipFromFbx(string fbxPath)
+        {
+            foreach (var asset in AssetDatabase.LoadAllAssetsAtPath(fbxPath))
+                if (asset is AnimationClip clip && !clip.name.StartsWith("__"))
+                    return clip;
+            Debug.LogWarning($"[DemoSceneBuilder] {fbxPath} 里没有可用的 AnimationClip");
+            return null;
+        }
+
         // ---------------- 资源工具 ----------------
         private static Material GetOrCreateMaterial(string path, Color color)
         {
@@ -234,6 +418,50 @@ namespace RollABallEditorTools
                 AssetDatabase.CreateAsset(mat, path);
             }
             return mat;
+        }
+
+        /// 抓取按钮的白色圆环（程序化生成，空心带抗锯齿）
+        private static Sprite GetOrCreateRingSprite()
+        {
+            const string RingPath = "Assets/UI/button_ring.png";
+            if (AssetDatabase.LoadAssetAtPath<Object>(RingPath) == null)
+            {
+                const int size = 256;
+                var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+                float c = (size - 1) * 0.5f;
+                const float outer = 126f;
+                const float inner = 110f;   // 环厚 16 像素（显示在 160 按钮上约 10px）
+                for (int y = 0; y < size; y++)
+                {
+                    for (int x = 0; x < size; x++)
+                    {
+                        float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                        float a = Mathf.Clamp01(outer - d + 0.5f) * Mathf.Clamp01(d - inner + 0.5f);
+                        tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+                    }
+                }
+                tex.Apply();
+
+                Directory.CreateDirectory("Assets/UI");
+                File.WriteAllBytes(RingPath, tex.EncodeToPNG());
+                Object.DestroyImmediate(tex);
+                AssetDatabase.ImportAsset(RingPath);
+            }
+            ForceSpriteImport(RingPath);
+            return AssetDatabase.LoadAssetAtPath<Sprite>(RingPath);
+        }
+
+        /// 强制把贴图导入为 UI Sprite 模式（用户手放的 PNG 默认是 Texture 类型，UI Image 读不到）
+        private static void ForceSpriteImport(string path)
+        {
+            if (AssetImporter.GetAtPath(path) is TextureImporter ti &&
+                (ti.textureType != TextureImporterType.Sprite || !ti.alphaIsTransparency || ti.mipmapEnabled))
+            {
+                ti.textureType = TextureImporterType.Sprite;
+                ti.alphaIsTransparency = true;
+                ti.mipmapEnabled = false;
+                ti.SaveAndReimport();
+            }
         }
 
         private static Sprite GetOrCreateCircleSprite()
