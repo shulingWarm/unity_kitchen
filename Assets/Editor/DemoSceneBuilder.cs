@@ -35,6 +35,8 @@ namespace RollABallEditorTools
             var matGround = GetOrCreateMaterial("Assets/Materials/M_Ground.mat", new Color(0.55f, 0.75f, 0.55f));
             var matWall   = GetOrCreateMaterial("Assets/Materials/M_Wall.mat", new Color(0.65f, 0.65f, 0.65f));
             var matPickup = GetOrCreateMaterial("Assets/Materials/M_Pickup.mat", new Color(0.95f, 0.8f, 0.15f));
+            var matServingSide = GetOrCreateMaterial("Assets/Materials/M_ServingSide.mat", new Color(0.30f, 0.32f, 0.35f));
+            var matServingTop  = GetOrCreateServingTopMaterial("Assets/Materials/M_ServingTop.mat");
 
             // ---- 地面 / 墙 / 收集物：运行时由 MapLoader 按地图数据生成，场景里不再硬编码 ----
 
@@ -106,6 +108,8 @@ namespace RollABallEditorTools
             loader.groundMaterial = matGround;
             loader.wallMaterial = matWall;
             loader.pickupMaterial = matPickup;
+            loader.servingTopMaterial = matServingTop;
+            loader.servingSideMaterial = matServingSide;
             player.GetComponent<PlayerController>().mapLoader = loader;   // 抓取时查木箱列表
 
             // ---- UI ----
@@ -470,6 +474,69 @@ namespace RollABallEditorTools
         }
 
         // ---------------- 资源工具 ----------------
+
+        /// 出餐口顶面材质：深灰底 + 白色 ">" 箭头（程序化生成，Repeat 包裹保证无缝滚动）
+        private static Material GetOrCreateServingTopMaterial(string path)
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Standard"));
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            mat.mainTexture = GetOrCreateConveyorTexture();
+            EditorUtility.SetDirty(mat);
+            return mat;
+        }
+
+        private static Texture2D GetOrCreateConveyorTexture()
+        {
+            const string texPath = "Assets/UI/conveyor_chevrons.png";
+            var existing = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+            if (existing != null) return existing;
+
+            const int size = 256;
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
+            var bg = new Color(0.24f, 0.26f, 0.29f, 1f);
+
+            // 两个 ">" 箭头：两笔从左上/左下汇聚到右侧中点（尖端朝运动方向 +X），
+            // 箭头之间留空隙各自独立；滚动衔接处落在空隙里，无缝
+            (Vector2 a, Vector2 b)[] segs =
+            {
+                (new Vector2(8f, 218f),   new Vector2(72f, 128f)),    // 箭头1 上笔
+                (new Vector2(8f, 38f),    new Vector2(72f, 128f)),    // 箭头1 下笔
+                (new Vector2(136f, 218f), new Vector2(200f, 128f)),   // 箭头2 上笔
+                (new Vector2(136f, 38f),  new Vector2(200f, 128f)),   // 箭头2 下笔
+            };
+            const float halfT = 9f;   // 箭头线宽的一半（像素）
+            const float aa = 1.5f;
+
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float dist = float.MaxValue;
+                    foreach (var (a, b) in segs)
+                    {
+                        Vector2 pa = new Vector2(x, y) - a;
+                        Vector2 ba = b - a;
+                        float h = Mathf.Clamp01(Vector2.Dot(pa, ba) / ba.sqrMagnitude);
+                        dist = Mathf.Min(dist, (pa - ba * h).magnitude);
+                    }
+                    float arrow = Mathf.Clamp01((halfT + aa - dist) / (2f * aa));
+                    tex.SetPixel(x, y, Color.Lerp(bg, Color.white, arrow));
+                }
+            }
+            tex.Apply();
+            tex.wrapMode = TextureWrapMode.Repeat;
+
+            Directory.CreateDirectory("Assets/UI");
+            File.WriteAllBytes(texPath, tex.EncodeToPNG());
+            Object.DestroyImmediate(tex);
+            AssetDatabase.ImportAsset(texPath);
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+        }
+
         private static Material GetOrCreateMaterial(string path, Color color)
         {
             var mat = AssetDatabase.LoadAssetAtPath<Material>(path);

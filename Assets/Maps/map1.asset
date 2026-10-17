@@ -16,7 +16,7 @@ MonoBehaviour:
   cols: 10
   cellSize: 2
   gridRows:
-  - 0 0 0 0 0 0 0 0 0 0
+  - 0 0 0 0 s1 0 0 0 0 0
   - 0 0 0 0 0 0 0 x 0 0
   - 0 0 0 1 0 0 x 1 x 0
   - 0 w1 0 1 0 0 0 1 x 0

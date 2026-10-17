@@ -119,6 +119,11 @@ namespace RollABallEditorTools
                         case "0":
                         case "1":
                         case "x":
+                        case "s":    // 出餐口简写 = s1（朝上）
+                        case "s1":   // 出餐口朝上
+                        case "s2":   // 出餐口朝下
+                        case "s3":   // 出餐口朝左
+                        case "s4":   // 出餐口朝右
                             break;
                         case "p":
                             pCount++;
@@ -128,7 +133,7 @@ namespace RollABallEditorTools
                         default:
                             if (!BoxToken.IsMatch(t))
                                 throw new System.Exception(
-                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/x/p/wN）");
+                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/x/p/wN/s1-s4）");
                             usedBoxTokens.Add(t);
                             break;
                     }

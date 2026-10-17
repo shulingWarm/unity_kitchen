@@ -17,6 +17,8 @@ namespace RollABall
         public Material groundMaterial;
         public Material wallMaterial;
         public Material pickupMaterial;
+        public Material servingTopMaterial;    // 出餐口顶面（chevron 滚动纹理）
+        public Material servingSideMaterial;   // 出餐口侧面（深灰）
 
         public float wallHeight = 1f;
         public float pickupScale = 0.6f;
@@ -86,6 +88,8 @@ namespace RollABall
             wallsRoot.transform.SetParent(transform, false);
             var boxesRoot = new GameObject("Boxes");
             boxesRoot.transform.SetParent(transform, false);
+            var servingRoot = new GameObject("Serving");
+            servingRoot.transform.SetParent(transform, false);
 
             for (int r = 0; r < map.rows; r++)
             {
@@ -94,6 +98,7 @@ namespace RollABall
                     string t = cells[r, c];
                     if (t == "1") BuildWallCell(wallsRoot.transform, r, c);
                     else if (t.Length > 1 && t[0] == 'w') BuildBox(boxesRoot.transform, r, c, t);
+                    else if (t[0] == 's') BuildServingCell(servingRoot.transform, r, c, t);
                 }
             }
         }
@@ -133,6 +138,42 @@ namespace RollABall
             top.transform.SetParent(box.transform, false);
             top.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);   // Quad 默认朝 -Z，转成朝上
             top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
+        }
+
+        /// <summary>
+        /// 出餐口：柜台方块（障碍物），顶面是滚动的 ">" 箭头传送带。
+        /// token：s（=s1）或 s1~s4，箭头分别朝 上/下/左/右。
+        /// </summary>
+        private void BuildServingCell(Transform parent, int r, int c, string token)
+        {
+            string dir = token == "s" ? "s1" : token;
+            // 顶面绕竖直轴的 yaw：箭头纹理 +u 指向 → 转到对应的世界方向
+            // （Unity yaw 正方向为俯视逆时针；北=+Z，东=+X）
+            float yaw = dir switch
+            {
+                "s1" => 270f,   // 上（北，+Z）
+                "s2" => 90f,    // 下（南，-Z）
+                "s3" => 180f,   // 左（西，-X）
+                _ => 0f,        // s4：右（东，+X）
+            };
+
+            var counter = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            counter.name = $"Serving_{token}_{r}_{c}";
+            counter.transform.SetParent(parent, false);
+            counter.transform.localScale = new Vector3(map.cellSize, wallHeight, map.cellSize);
+            counter.transform.position = map.CellToWorld(r, c) + Vector3.up * (wallHeight * 0.5f);
+            counter.GetComponent<Renderer>().sharedMaterial =
+                servingSideMaterial != null ? servingSideMaterial : wallMaterial;
+
+            var top = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Object.Destroy(top.GetComponent<Collider>());
+            top.name = "Conveyor";
+            top.GetComponent<Renderer>().sharedMaterial =
+                servingTopMaterial != null ? servingTopMaterial : wallMaterial;
+            top.transform.SetParent(counter.transform, false);
+            top.transform.localRotation = Quaternion.Euler(90f, yaw, 0f);
+            top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
+            top.AddComponent<ConveyorScroller>();
         }
 
         private void BuildPickups()
