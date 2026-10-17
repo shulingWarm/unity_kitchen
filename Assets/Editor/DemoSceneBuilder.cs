@@ -62,6 +62,8 @@ namespace RollABallEditorTools
                 bot.transform.localRotation = Quaternion.identity;
                 CenterModelOnPivot(bot);   // 身体包围盒中心对齐旋转轴、脚底贴地，防转身公转
                 botAnimator = bot.GetComponent<Animator>();
+                var handIK = bot.AddComponent<PlayerHandIK>();
+                handIK.player = player.GetComponent<PlayerController>();
             }
             else
             {
@@ -104,6 +106,7 @@ namespace RollABallEditorTools
             loader.groundMaterial = matGround;
             loader.wallMaterial = matWall;
             loader.pickupMaterial = matPickup;
+            player.GetComponent<PlayerController>().mapLoader = loader;   // 抓取时查木箱列表
 
             // ---- UI ----
             BuildUI(player);
@@ -216,9 +219,10 @@ namespace RollABallEditorTools
                 new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero);
 
-            // 抓取按钮（右下，与摇杆待机位同高；目前仅展示，无点击逻辑）
+            // 抓取按钮（右下，与摇杆待机位同高）
             var grabGO = new GameObject("GrabButton",
-                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(GrabButton));
+            grabGO.GetComponent<GrabButton>().player = player.GetComponent<PlayerController>();
             grabGO.transform.SetParent(canvasGO.transform, false);
             SetRect(grabGO.GetComponent<RectTransform>(),
                 new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0.5f),
@@ -327,7 +331,11 @@ namespace RollABallEditorTools
                 bot.SaveAndReimport();
             }
 
-            foreach (string animPath in new[] { "Assets/Models/Idle.fbx", "Assets/Models/Walking.fbx" })
+            foreach (string animPath in new[]
+            {
+                "Assets/Models/Idle.fbx", "Assets/Models/Walking.fbx",
+                "Assets/Models/Carrying.fbx", "Assets/Models/carry_walk.fbx"
+            })
             {
                 if (AssetImporter.GetAtPath(animPath) is ModelImporter imp)
                 {
@@ -366,36 +374,89 @@ namespace RollABallEditorTools
             }
         }
 
-        /// 程序化生成 Animator 状态机：MoveSpeed 参数驱动 Idle <-> Walk
+        /// <summary>
+        /// 程序化维护 Animator 状态机（幂等，可重复执行）：
+        /// 4 状态 = 空手(Idle/Walk) + 捧物(CarryIdle/CarryWalk)，
+        /// 由 MoveSpeed（移动）与 IsCarry（持物）两个参数驱动。
+        /// </summary>
         private static RuntimeAnimatorController GetOrCreatePlayerAnimator()
         {
             const string path = "Assets/Animations/PlayerAnimator.controller";
-            var existing = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
-            if (existing != null) return existing;
+            var ctrl = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+            if (ctrl == null)
+            {
+                EnsureFolder("Assets/Animations");
+                ctrl = AnimatorController.CreateAnimatorControllerAtPath(path);
+            }
 
-            EnsureFolder("Assets/Animations");
-            var ctrl = AnimatorController.CreateAnimatorControllerAtPath(path);
-            ctrl.AddParameter("MoveSpeed", AnimatorControllerParameterType.Float);
+            // ---- 参数 ----
+            if (!HasParameter(ctrl, "MoveSpeed"))
+                ctrl.AddParameter("MoveSpeed", AnimatorControllerParameterType.Float);
+            if (!HasParameter(ctrl, "IsCarry"))
+                ctrl.AddParameter("IsCarry", AnimatorControllerParameterType.Bool);
+
+            // ---- 状态（不存在则建，存在则刷新剪辑引用）----
             var root = ctrl.layers[0].stateMachine;
+            var idle = EnsureState(root, "Idle", LoadClipFromFbx("Assets/Models/Idle.fbx"));
+            var walk = EnsureState(root, "Walk", LoadClipFromFbx("Assets/Models/Walking.fbx"));
+            var carryIdle = EnsureState(root, "CarryIdle", LoadClipFromFbx("Assets/Models/Carrying.fbx"));
+            var carryWalk = EnsureState(root, "CarryWalk", LoadClipFromFbx("Assets/Models/carry_walk.fbx"));
+            if (root.defaultState == null) root.defaultState = idle;
 
-            var idle = root.AddState("Idle");
-            idle.motion = LoadClipFromFbx("Assets/Models/Idle.fbx");
-            var walk = root.AddState("Walk");
-            walk.motion = LoadClipFromFbx("Assets/Models/Walking.fbx");
-            root.defaultState = idle;
+            // ---- 转换（每次重建，保证与代码一致）----
+            // 移动切换只作用于本分支（叠加 IsCarry 条件，避免持物时被 MoveSpeed 抢跳）
+            RebuildTransition(idle, walk, AnimatorConditionMode.Greater, 0.1f, "MoveSpeed", false);
+            RebuildTransition(walk, idle, AnimatorConditionMode.Less, 0.1f, "MoveSpeed", false);
+            RebuildTransition(carryIdle, carryWalk, AnimatorConditionMode.Greater, 0.1f, "MoveSpeed", true);
+            RebuildTransition(carryWalk, carryIdle, AnimatorConditionMode.Less, 0.1f, "MoveSpeed", true);
+            // 拿起 / （未来）放下的持物分支切换
+            RebuildTransition(idle, carryIdle, AnimatorConditionMode.If, 0f, "IsCarry", null);
+            RebuildTransition(carryIdle, idle, AnimatorConditionMode.IfNot, 0f, "IsCarry", null);
+            RebuildTransition(walk, carryWalk, AnimatorConditionMode.If, 0f, "IsCarry", null);
+            RebuildTransition(carryWalk, walk, AnimatorConditionMode.IfNot, 0f, "IsCarry", null);
 
-            var toWalk = idle.AddTransition(walk);
-            toWalk.hasExitTime = false;
-            toWalk.duration = 0.15f;
-            toWalk.AddCondition(AnimatorConditionMode.Greater, 0.1f, "MoveSpeed");
-
-            var toIdle = walk.AddTransition(idle);
-            toIdle.hasExitTime = false;
-            toIdle.duration = 0.15f;
-            toIdle.AddCondition(AnimatorConditionMode.Less, 0.1f, "MoveSpeed");
-
+            EditorUtility.SetDirty(ctrl);
             AssetDatabase.SaveAssets();
             return ctrl;
+        }
+
+        private static bool HasParameter(AnimatorController ctrl, string name)
+        {
+            foreach (var p in ctrl.parameters)
+                if (p.name == name) return true;
+            return false;
+        }
+
+        private static AnimatorState EnsureState(AnimatorStateMachine sm, string name, Motion motion)
+        {
+            foreach (var s in sm.states)
+            {
+                if (s.state.name != name) continue;
+                s.state.motion = motion;
+                return s.state;
+            }
+            var st = sm.AddState(name);
+            st.motion = motion;
+            return st;
+        }
+
+        /// 删除 from→to 的旧转换后按条件重建；moveParamGuard 非 null 时追加第二个条件（同 IsCarry 值）
+        private static void RebuildTransition(AnimatorState from, AnimatorState to,
+            AnimatorConditionMode mode, float threshold, string param, bool? isCarryGuard)
+        {
+            for (int i = from.transitions.Length - 1; i >= 0; i--)
+            {
+                var t = from.transitions[i];
+                if (t.destinationState == to) from.RemoveTransition(t);
+            }
+
+            var nt = from.AddTransition(to);
+            nt.hasExitTime = false;
+            nt.duration = 0.15f;
+            nt.AddCondition(mode, threshold, param);
+            if (isCarryGuard.HasValue)
+                nt.AddCondition(isCarryGuard.Value ? AnimatorConditionMode.If : AnimatorConditionMode.IfNot,
+                    0f, "IsCarry");
         }
 
         /// 取 FBX 里的动画剪辑（Mixamo 的剪辑名通常是 "mixamo.com"）

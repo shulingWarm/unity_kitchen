@@ -22,6 +22,9 @@ namespace RollABall
         public float pickupScale = 0.6f;
         public float boxSize = 1.6f;    // 木箱边长；格子 2.0 留 0.4 缝，球直径 1.0 钻不进，碰撞用箱子自身即可
 
+        /// 运行时生成的所有木箱（抓取功能的距离查询用）
+        public List<Transform> Boxes { get; } = new List<Transform>();
+
         private string[,] cells;         // 预拆分的 token 网格
         private Dictionary<string, Material> boxTopMaterials;
 
@@ -115,6 +118,7 @@ namespace RollABall
             box.transform.position = map.CellToWorld(r, c) + Vector3.up * (boxSize * 0.5f);
             box.GetComponent<Renderer>().sharedMaterial =
                 map.blockSideMaterial != null ? map.blockSideMaterial : wallMaterial;
+            Boxes.Add(box.transform);
 
             // 顶面图片：Quad 盖在顶面（抬高 0.002 防 Z-fighting），Quad 的碰撞体去掉
             Material topMat;
