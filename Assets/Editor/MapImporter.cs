@@ -10,7 +10,7 @@ namespace RollABallEditorTools
 {
     /// <summary>
     /// 把工程根 maps/*.txt 解析校验后转成 Assets/Maps/*.asset（MapData）。
-    /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/x/p/wN；
+    /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/p/wN/s1-s4；
     /// 兼容旧格式：整行无分隔符且长度等于列数时按单字符解析。
     /// 图例区：网格后每行 "wN: 图片路径"（相对 Assets），导入时烘焙顶面材质。
     /// 资产已存在时覆盖字段（保留 GUID，场景引用不失效）。
@@ -61,7 +61,7 @@ namespace RollABallEditorTools
                     okCount++;
                     Debug.Log($"[MapImporter] {assetPath} ← {Path.GetFileName(txtPath)}" +
                               $"（{parsed.rows}x{parsed.cols}，出生点 r{parsed.spawnCell.x} c{parsed.spawnCell.y}，" +
-                              $"小球 {parsed.CountPickups()} 个，木箱类型 {parsed.blockTypes.Length} 种）");
+                              $"木箱类型 {parsed.blockTypes.Length} 种）");
                 }
                 catch (System.Exception e)
                 {
@@ -118,7 +118,6 @@ namespace RollABallEditorTools
                     {
                         case "0":
                         case "1":
-                        case "x":
                         case "s":    // 出餐口简写 = s1（朝上）
                         case "s1":   // 出餐口朝上
                         case "s2":   // 出餐口朝下
@@ -130,10 +129,13 @@ namespace RollABallEditorTools
                             spawn = new Vector2Int(r, c);
                             t = "0";   // 出生点站在地面格上，归一化存储
                             break;
+                        case "x":
+                            throw new System.Exception(
+                                $"第 {r + 2} 行第 {c + 1} 格的 'x'（收集物）已随胜利条件移除，请改为 0");
                         default:
                             if (!BoxToken.IsMatch(t))
                                 throw new System.Exception(
-                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/x/p/wN/s1-s4）");
+                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/p/wN/s1-s4）");
                             usedBoxTokens.Add(t);
                             break;
                     }

@@ -16,7 +16,6 @@ namespace RollABall
         public Camera followCamera;
         public Material groundMaterial;
         public Material wallMaterial;
-        public Material pickupMaterial;
         public Material servingTopMaterial;    // 出餐口顶面（chevron 滚动纹理）
         public Material servingSideMaterial;   // 出餐口侧面（深灰）
 
@@ -43,11 +42,10 @@ namespace RollABall
 
             BuildGround();
             BuildObstacles();
-            BuildPickups();
             PlacePlayer();
             FrameCamera();
 
-            Debug.Log($"[MapLoader] 地图加载完成：{map.rows}x{map.cols}，小球 {map.CountPickups()} 个，" +
+            Debug.Log($"[MapLoader] 地图加载完成：{map.rows}x{map.cols}，" +
                       $"出生点 (r{map.spawnCell.x}, c{map.spawnCell.y})");
         }
 
@@ -174,30 +172,6 @@ namespace RollABall
             top.transform.localRotation = Quaternion.Euler(90f, yaw, 0f);
             top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
             top.AddComponent<ConveyorScroller>();
-        }
-
-        private void BuildPickups()
-        {
-            var pickupsRoot = new GameObject("Pickups");
-            pickupsRoot.transform.SetParent(transform, false);
-
-            for (int r = 0; r < map.rows; r++)
-            {
-                for (int c = 0; c < map.cols; c++)
-                {
-                    if (cells[r, c] != "x") continue;
-
-                    var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                    cube.name = $"Pickup_{r}_{c}";
-                    cube.tag = "Pickup";
-                    cube.transform.SetParent(pickupsRoot.transform, false);
-                    cube.transform.localScale = Vector3.one * pickupScale;
-                    cube.transform.position = map.CellToWorld(r, c) + Vector3.up * 0.5f;
-                    cube.GetComponent<Renderer>().sharedMaterial = pickupMaterial;
-                    cube.GetComponent<BoxCollider>().isTrigger = true;
-                    cube.AddComponent<PickupSpin>();
-                }
-            }
         }
 
         private void PlacePlayer()

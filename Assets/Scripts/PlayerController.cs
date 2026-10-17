@@ -1,14 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace RollABall
 {
     /// <summary>
     /// 玩家（人形角色）：读取虚拟摇杆输入做相机相对移动，
     /// 模型朝移动方向转身，Animator 按移动状态切换 Idle/Walk。
-    /// 并在触发器中收集方块、更新计分 UI。
     /// 抓取：点击抓取按钮时从最近的木箱拿出绿色小球，双手 IK 捧在身前。
+    /// 胜利条件：暂无（收集玩法已移除）。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerController : MonoBehaviour
@@ -18,8 +17,6 @@ namespace RollABall
         public Animator animator;         // 场景生成器注入（挂在模型实例上）
         public Transform modelPivot;      // 模型父节点：只负责朝向，物理根不旋转
         public float turnSpeed = 12f;     // 转身平滑度
-        public Text scoreText;
-        public Text winText;
 
         [Header("抓取")]
         public MapLoader mapLoader;       // 木箱列表来源
@@ -27,8 +24,6 @@ namespace RollABall
         public float itemRadius = 0.18f;  // 手持绿球半径
 
         private Rigidbody rb;
-        private int score;
-        private int totalPickups;
         private GameObject heldItem;      // 手上的物品（挂在胸部骨骼上，null = 空手）
 
         private static Material itemMaterial;
@@ -38,13 +33,6 @@ namespace RollABall
             rb = GetComponent<Rigidbody>();
             rb.interpolation = RigidbodyInterpolation.Interpolate;
             rb.constraints = RigidbodyConstraints.FreezeRotation;   // 人形不翻滚
-        }
-
-        private void Start()
-        {
-            totalPickups = GameObject.FindGameObjectsWithTag("Pickup").Length;
-            UpdateScoreUI();
-            if (winText != null) winText.gameObject.SetActive(false);
         }
 
         private void FixedUpdate()
@@ -90,24 +78,6 @@ namespace RollABall
                 if (r.sqrMagnitude > 0.001f) camRight = r.normalized;
             }
             return (camRight * input.x + camForward * input.y).normalized;
-        }
-
-        private void OnTriggerEnter(Collider other)
-        {
-            if (!other.CompareTag("Pickup")) return;
-
-            Destroy(other.gameObject);
-            score++;
-            UpdateScoreUI();
-
-            if (score >= totalPickups && winText != null)
-                winText.gameObject.SetActive(true);
-        }
-
-        private void UpdateScoreUI()
-        {
-            if (scoreText != null)
-                scoreText.text = $"Score: {score} / {totalPickups}";
         }
 
         // ---------------- 抓取 ----------------

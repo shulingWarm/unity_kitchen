@@ -7,8 +7,10 @@ namespace RollABall
     /// 源文件是工程根 maps/*.txt，由编辑器菜单"导入地图"解析生成 .asset；
     /// 游戏运行时只读这个 asset，不碰 txt。
     /// 网格按 token 存储每行一串空格分隔的单元格：
-    ///   0 = 地面   1 = 墙   x = 可吃小球   p = 出生点（导入时归一化为 0，单存 spawnCell）
+    ///   0 = 地面   1 = 墙   p = 出生点（导入时归一化为 0，单存 spawnCell）
     ///   wN = 木箱（外观/顶图由 blockTypes/blockImages/blockMaterials 图例定义，碰撞等同墙）
+    ///   s/s1-s4 = 出餐口（障碍物，箭头方向随编号）
+    ///   （可吃小球 x 已随胜利条件移除）
     /// </summary>
     [CreateAssetMenu(fileName = "MapData", menuName = "Roll-a-Ball/Map Data")]
     public class MapData : ScriptableObject
@@ -32,15 +34,6 @@ namespace RollABall
         public string[] SplitRow(int r) => gridRows != null && r < gridRows.Length
             ? gridRows[r].Split(' ')
             : System.Array.Empty<string>();
-
-        public int CountPickups()
-        {
-            int n = 0;
-            for (int r = 0; r < rows; r++)
-                foreach (string t in SplitRow(r))
-                    if (t == "x") n++;
-            return n;
-        }
 
         /// <summary>
         /// 网格坐标 → 世界坐标。地图居中于原点，row 0 在北侧（远离默认相机）。

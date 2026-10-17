@@ -24,7 +24,6 @@ namespace RollABallEditorTools
         [MenuItem("Tools/Roll-a-Ball/1 - 构建 Demo 场景")]
         public static void BuildScene()
         {
-            EnsureTag("Pickup");
             EnsureFolder("Assets/Scenes");
             EnsureFolder("Assets/Materials");
             EnsureFolder("Assets/UI");
@@ -34,7 +33,6 @@ namespace RollABallEditorTools
             // ---- 材质 ----
             var matGround = GetOrCreateMaterial("Assets/Materials/M_Ground.mat", new Color(0.55f, 0.75f, 0.55f));
             var matWall   = GetOrCreateMaterial("Assets/Materials/M_Wall.mat", new Color(0.65f, 0.65f, 0.65f));
-            var matPickup = GetOrCreateMaterial("Assets/Materials/M_Pickup.mat", new Color(0.95f, 0.8f, 0.15f));
             var matServingSide = GetOrCreateMaterial("Assets/Materials/M_ServingSide.mat", new Color(0.30f, 0.32f, 0.35f));
             var matServingTop  = GetOrCreateServingTopMaterial("Assets/Materials/M_ServingTop.mat");
 
@@ -107,7 +105,6 @@ namespace RollABallEditorTools
             loader.followCamera = camGO.GetComponent<Camera>();
             loader.groundMaterial = matGround;
             loader.wallMaterial = matWall;
-            loader.pickupMaterial = matPickup;
             loader.servingTopMaterial = matServingTop;
             loader.servingSideMaterial = matServingSide;
             player.GetComponent<PlayerController>().mapLoader = loader;   // 抓取时查木箱列表
@@ -175,21 +172,6 @@ namespace RollABallEditorTools
             var eventSystem = new GameObject("EventSystem", typeof(EventSystem), typeof(InputSystemUIInputModule));
 
             Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
-            // 分数（顶部居中）
-            var scoreGO = CreateText(canvasGO.transform, "ScoreText", "Score: 0 / 8", font, 32, Color.white);
-            SetRect(scoreGO.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
-                new Vector2(420f, 60f), new Vector2(0f, -15f));
-            scoreGO.AddComponent<Outline>().effectColor = Color.black;
-
-            // 胜利提示（居中，默认隐藏）
-            var winGO = CreateText(canvasGO.transform, "WinText", "YOU WIN!", font, 56, new Color(1f, 0.85f, 0.1f));
-            SetRect(winGO.GetComponent<RectTransform>(),
-                new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(600f, 100f), Vector2.zero);
-            winGO.AddComponent<Outline>().effectColor = Color.black;
-            winGO.SetActive(false);
 
             // 浮动摇杆热区（左下角 40% 宽 × 60% 高，全透明但接收触控；摇杆视觉由组件运行时自建）
             var zoneGO = new GameObject("JoystickZone", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(VirtualJoystick));
@@ -263,11 +245,6 @@ namespace RollABallEditorTools
             {
                 Debug.LogWarning($"[DemoSceneBuilder] 找不到 {GrabIconPath}，抓取按钮只有圆环");
             }
-
-            // 玩家脚本挂 UI 引用
-            var pc = player.GetComponent<PlayerController>();
-            pc.scoreText = scoreGO.GetComponent<Text>();
-            pc.winText = winGO.GetComponent<Text>();
 
             // 倒计时条（右下角，UI 由组件运行时自建）
             new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
