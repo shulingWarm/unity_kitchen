@@ -12,16 +12,25 @@ namespace RollABallEditorTools
     /// 把工程根 maps/*.txt 解析校验后转成 Assets/Maps/*.asset（MapData）。
     /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/p/wN/s1-s4；
     /// 兼容旧格式：整行无分隔符且长度等于列数时按单字符解析。
-    /// 图例区：每个木箱类型三行——「wN:」单独一行，随后两个非空行依次是
-    /// 图片路径（烘焙顶面材质）、fbx 模型路径（取出物品模型），均相对 Assets；
-    /// 模型缺贴图时的兜底材质优先用其同目录的 colormap.png / 同名 png，否则用图例图片。
+    /// 图例区（均在网格行之后，空行随意）：
+    ///   「wN:」小节 → image:/model:/object: 三个标签字段（顶图、取出物品 fbx、object.json 物品 id）；
+    ///   「tasks:」小节 → 若干行物品 id，构成本地图任务池；
+    ///   「task_num:N」→ 同时驻留的任务卡数。
+    /// 同时把 Assets/GameInfo/object.json 烘焙成 ItemRegistry.asset（id → 图标），
+    /// 图例里的 object:/tasks: 的 id 必须都登记在内。模型缺贴图时的兜底材质
+    /// 优先用其同目录的 colormap.png / 同名 png，否则用图例图片。
     /// 资产已存在时覆盖字段（保留 GUID，场景引用不失效）。
     /// </summary>
     public static class MapImporter
     {
         private const string AssetFolder = "Assets/Maps";
+        private const string GameInfoFolder = "Assets/GameInfo";
+        private const string ObjectJsonPath = "Assets/GameInfo/object.json";
+        private const string RegistryAssetPath = "Assets/GameInfo/ItemRegistry.asset";
+
         private static readonly Regex BoxToken = new Regex(@"^w\d+$");
-        private static readonly Regex LegendHeader = new Regex(@"^\s*(\S+)\s*:\s*$");
+        private static readonly Regex SectionLine = new Regex(@"^\s*(\w+)\s*:\s*$");   // 小节头：wN: / tasks:
+        private static readonly Regex FieldLine = new Regex(@"^\s*(\w+)\s*:\s*(\S.*)$"); // 标签字段：key: value
 
         [MenuItem("Tools/Roll-a-Ball/3 - 导入 maps/ 下的地图文件")]
         public static void ImportMenu()
@@ -43,6 +52,18 @@ namespace RollABallEditorTools
             okCount = 0;
             failCount = 0;
 
+            // 物品注册表是图例 object:/tasks: 校验和任务系统的根，失败则整体不导入
+            HashSet<string> itemIds;
+            try
+            {
+                itemIds = BakeItemRegistry();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[MapImporter] 物品注册表烘焙失败：{e.Message}");
+                return;
+            }
+
             string projectRoot = Directory.GetParent(Application.dataPath)!.FullName;
             string srcDir = Path.Combine(projectRoot, "maps");
             if (!Directory.Exists(srcDir))
@@ -56,14 +77,14 @@ namespace RollABallEditorTools
             {
                 try
                 {
-                    MapData parsed = ParseFile(txtPath);
+                    MapData parsed = ParseFile(txtPath, itemIds);
                     string assetPath = $"{AssetFolder}/{Path.GetFileNameWithoutExtension(txtPath)}.asset";
                     ApplyToAsset(parsed, assetPath);
 
                     okCount++;
                     Debug.Log($"[MapImporter] {assetPath} ← {Path.GetFileName(txtPath)}" +
                               $"（{parsed.rows}x{parsed.cols}，出生点 r{parsed.spawnCell.x} c{parsed.spawnCell.y}，" +
-                              $"木箱类型 {parsed.blockTypes.Length} 种）");
+                              $"木箱类型 {parsed.blockTypes.Length} 种，任务 {parsed.taskIds.Length} 种/驻留 {parsed.taskNum} 张）");
                 }
                 catch (System.Exception e)
                 {
@@ -76,7 +97,7 @@ namespace RollABallEditorTools
 
         // ---------------- 解析 ----------------
 
-        private static MapData ParseFile(string path)
+        private static MapData ParseFile(string path, HashSet<string> itemIds)
         {
             var content = new List<string>(File.ReadAllLines(path));
             for (int i = 0; i < content.Count; i++) content[i] = content[i].TrimEnd().TrimEnd('\r');
@@ -159,13 +180,15 @@ namespace RollABallEditorTools
                 if (spawn.x < 0) throw new System.Exception("地图里没有可站立的地面格（至少需要一个 0 或 p）");
             }
 
-            // ---------------- 图例区 ----------------
-            // 新格式：每个类型三行——「wN:」单独一行，随后两个非空行依次是 图片路径、模型路径
+            // ---------------- 图例 / 任务区 ----------------
             var types = new List<string>();
             var images = new List<string>();
             var materials = new List<Material>();
             var models = new List<GameObject>();
             var itemMaterials = new List<Material>();
+            var objectIds = new List<string>();
+            var taskIds = new List<string>();
+            int taskNum = -1;
 
             // 所有木箱共用的侧面材质（纯色木棕）
             Material sideMat = GetOrCreatePlainMaterial($"{AssetFolder}/BoxSide.mat", new Color(0.55f, 0.36f, 0.20f));
@@ -175,57 +198,85 @@ namespace RollABallEditorTools
                 string line = content[i];
                 if (line.Length == 0) { i++; continue; }
 
-                Match m = LegendHeader.Match(line);
-                if (!m.Success)
-                    throw new System.Exception(
-                        $"图例区第 {i + 1} 行 '{line}' 应为「wN:」（单独一行，后面跟图片路径、模型路径两行）。" +
-                        "旧的单行「wN: 图片路径」格式已不再支持");
-
-                string token = m.Groups[1].Value.ToLowerInvariant();
-                if (!BoxToken.IsMatch(token))
-                    throw new System.Exception($"图例 token '{token}' 非法（应为 wN 形式，如 w1）");
-
-                // 收集本图例的两个字段（容忍空行）：字段 1 = 图片，字段 2 = 模型
-                var fields = new string[2];
-                int found = 0;
-                i++;
-                while (i < content.Count && found < 2)
+                Match section = SectionLine.Match(line);
+                if (section.Success)
                 {
-                    string field = content[i].Trim();
-                    if (field.Length == 0) { i++; continue; }
-                    if (LegendHeader.IsMatch(field))
+                    string name = section.Groups[1].Value.ToLowerInvariant();
+                    if (BoxToken.IsMatch(name))
+                    {
+                        // 木箱图例小节：image/model/object 三个标签字段
+                        var fields = ParseLegendFields(content, ref i, name);
+
+                        string imagePath = "Assets/" + fields["image"].Replace('\\', '/');
+                        var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
+                        if (tex == null)
+                            throw new System.Exception($"图例 {name} 的图片不存在：{imagePath}");
+
+                        string modelPath = "Assets/" + fields["model"].Replace('\\', '/');
+                        var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+                        if (model == null)
+                            throw new System.Exception(
+                                $"图例 {name} 的模型不存在或尚未被 Unity 导入：{modelPath}（fbx 需放在 Assets 下）");
+
+                        string objectId = fields["object"].ToLowerInvariant();
+                        if (!itemIds.Contains(objectId))
+                            throw new System.Exception(
+                                $"图例 {name} 的 object '{objectId}' 没有在 object.json 里登记" +
+                                $"（现有：{string.Join(", ", itemIds)}）");
+
+                        types.Add(name);
+                        images.Add(fields["image"]);
+                        materials.Add(GetOrCreateTopMaterial($"{AssetFolder}/BoxTop_{name}.mat", tex));
+                        models.Add(model);
+                        itemMaterials.Add(GetOrCreateTopMaterial(
+                            $"{AssetFolder}/BoxItem_{name}.mat", FindItemTexture(modelPath, imagePath)));
+                        objectIds.Add(objectId);
+                    }
+                    else if (name == "tasks")
+                    {
+                        // 任务池：若干行物品 id，直到下一个小节头/标签字段/文件尾
+                        i++;
+                        while (i < content.Count)
+                        {
+                            string id = content[i].Trim();
+                            if (id.Length == 0) { i++; continue; }
+                            if (SectionLine.IsMatch(id) || FieldLine.IsMatch(id)) break;
+                            taskIds.Add(id.ToLowerInvariant());
+                            i++;
+                        }
+                        if (taskIds.Count == 0)
+                            throw new System.Exception("tasks: 小节为空（至少写一个物品 id）");
+                    }
+                    else
+                    {
                         throw new System.Exception(
-                            $"图例 {token} 字段不全：第 {i + 1} 行出现了下一个「wN:」，缺少图片/模型路径");
-                    fields[found++] = field;
+                            $"图例区第 {i + 1} 行 '{line}' 无法识别（小节头只支持 wN: 与 tasks:）");
+                    }
+                }
+                else
+                {
+                    // 顶层标签字段目前只有 task_num
+                    Match field = FieldLine.Match(line);
+                    if (!field.Success || field.Groups[1].Value.ToLowerInvariant() != "task_num")
+                        throw new System.Exception(
+                            $"图例区第 {i + 1} 行 '{line}' 无法识别（应为「wN:」/「tasks:」小节头或「task_num:N」）");
+                    if (!int.TryParse(field.Groups[2].Value.Trim(), out taskNum) || taskNum <= 0)
+                        throw new System.Exception($"task_num 必须是正整数，读到 '{field.Groups[2].Value.Trim()}'");
                     i++;
                 }
-                if (found < 2)
-                    throw new System.Exception($"图例 {token} 字段不全：需要「wN:」+ 图片路径 + 模型路径 共 3 行");
-
-                // 字段 1：图片 → 顶面材质（相对 Assets 解析）
-                string texPath = "Assets/" + fields[0].Replace('\\', '/');
-                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
-                if (tex == null)
-                    throw new System.Exception($"图例 {token} 的图片不存在：{texPath}");
-
-                // 字段 2：模型 → 取出物品的 prefab
-                string modelPath = "Assets/" + fields[1].Replace('\\', '/');
-                var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
-                if (model == null)
-                    throw new System.Exception(
-                        $"图例 {token} 的模型不存在或尚未被 Unity 导入：{modelPath}（fbx 需放在 Assets 下）");
-
-                types.Add(token);
-                images.Add(fields[0]);
-                materials.Add(GetOrCreateTopMaterial($"{AssetFolder}/BoxTop_{token}.mat", tex));
-                models.Add(model);
-                itemMaterials.Add(GetOrCreateTopMaterial(
-                    $"{AssetFolder}/BoxItem_{token}.mat", FindItemTexture(modelPath, texPath)));
             }
+
+            if (taskNum < 0)
+                throw new System.Exception("缺少 task_num:（同时驻留的任务卡数，如 task_num:3）");
+
+            foreach (string id in taskIds)
+                if (!itemIds.Contains(id))
+                    throw new System.Exception(
+                        $"tasks: 里的 '{id}' 没有在 object.json 里登记（现有：{string.Join(", ", itemIds)}）");
 
             foreach (string used in usedBoxTokens)
                 if (!types.Contains(used))
-                    throw new System.Exception($"网格使用了 {used}，但图例区没有它的定义（wN: + 图片路径 + 模型路径）");
+                    throw new System.Exception($"网格使用了 {used}，但图例区没有它的定义（wN: 小节，含 image/model/object）");
 
             var asset = ScriptableObject.CreateInstance<MapData>();
             asset.rows = rows;
@@ -237,8 +288,108 @@ namespace RollABallEditorTools
             asset.blockMaterials = materials.ToArray();
             asset.blockModels = models.ToArray();
             asset.blockItemMaterials = itemMaterials.ToArray();
+            asset.blockObjectIds = objectIds.ToArray();
             asset.blockSideMaterial = sideMat;
+            asset.taskIds = taskIds.ToArray();
+            asset.taskNum = taskNum;
             return asset;
+        }
+
+        /// <summary>
+        /// 收集 wN 小节的标签字段（image/model/object），直到下一个小节头「xxx:」、
+        /// 顶层字段 task_num 或文件尾；停止时 i 落在小节头/字段行上（由主循环继续处理）。
+        /// </summary>
+        private static Dictionary<string, string> ParseLegendFields(List<string> content, ref int i, string token)
+        {
+            var fields = new Dictionary<string, string>();
+            i++;
+            while (i < content.Count)
+            {
+                string line = content[i].Trim();
+                if (line.Length == 0) { i++; continue; }
+                if (SectionLine.IsMatch(line)) break;
+
+                Match f = FieldLine.Match(line);
+                if (f.Success && f.Groups[1].Value.ToLowerInvariant() == "task_num") break;   // 顶层字段，归还主循环
+                if (!f.Success)
+                    throw new System.Exception(
+                        $"图例 {token} 第 {i + 1} 行 '{line}' 应为「key: value」格式（image/model/object）");
+
+                string key = f.Groups[1].Value.ToLowerInvariant();
+                if (key != "image" && key != "model" && key != "object")
+                    throw new System.Exception($"图例 {token} 的字段 '{key}' 无法识别（只支持 image/model/object）");
+                if (fields.ContainsKey(key))
+                    throw new System.Exception($"图例 {token} 的字段 {key} 重复定义");
+
+                fields[key] = f.Groups[2].Value.Trim();
+                i++;
+            }
+
+            foreach (string required in new[] { "image", "model", "object" })
+                if (!fields.ContainsKey(required))
+                    throw new System.Exception($"图例 {token} 缺少 {required}: 字段");
+            return fields;
+        }
+
+        // ---------------- 物品注册表 ----------------
+
+        /// <summary>把 object.json 烘焙成 ItemRegistry.asset（运行时按 id 查图标），返回全部物品 id。</summary>
+        private static HashSet<string> BakeItemRegistry()
+        {
+            if (!File.Exists(ObjectJsonPath))
+                throw new System.Exception($"找不到 {ObjectJsonPath}（物品注册表源文件）");
+
+            EnsureFolder(GameInfoFolder);
+            var items = ParseItemJson(File.ReadAllText(ObjectJsonPath));
+
+            var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryAssetPath);
+            if (registry == null)
+            {
+                registry = ScriptableObject.CreateInstance<ItemRegistry>();
+                AssetDatabase.CreateAsset(registry, RegistryAssetPath);
+            }
+
+            var ids = new string[items.Count];
+            var icons = new Texture2D[items.Count];
+            for (int i = 0; i < items.Count; i++)
+            {
+                ids[i] = items[i].Key;
+                string imagePath = "Assets/" + items[i].Value["image"].Replace('\\', '/');
+                icons[i] = AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
+                if (icons[i] == null)
+                    throw new System.Exception($"object.json 物品 '{ids[i]}' 的图片不存在：{imagePath}");
+            }
+            registry.ids = ids;
+            registry.icons = icons;
+            EditorUtility.SetDirty(registry);
+            return new HashSet<string>(ids);
+        }
+
+        /// <summary>
+        /// 解析 object.json 的两层字典结构：{"id": {"image": "路径", ...}, ...}。
+        /// 只支持字符串值、块内无嵌套（本项目注册表就是这种扁平结构）。
+        /// </summary>
+        private static List<KeyValuePair<string, Dictionary<string, string>>> ParseItemJson(string json)
+        {
+            var items = new List<KeyValuePair<string, Dictionary<string, string>>>();
+            var seen = new HashSet<string>();
+            foreach (Match block in Regex.Matches(json, "\"([^\"]+)\"\\s*:\\s*\\{([^{}]*)\\}"))
+            {
+                string id = block.Groups[1].Value;
+                if (!seen.Add(id))
+                    throw new System.Exception($"object.json 里物品 '{id}' 重复定义");
+
+                var fields = new Dictionary<string, string>();
+                foreach (Match f in Regex.Matches(block.Groups[2].Value, "\"([^\"]+)\"\\s*:\\s*\"([^\"]*)\""))
+                    fields[f.Groups[1].Value] = f.Groups[2].Value;
+                if (!fields.ContainsKey("image"))
+                    throw new System.Exception($"object.json 里物品 '{id}' 缺少 image 字段");
+
+                items.Add(new KeyValuePair<string, Dictionary<string, string>>(id, fields));
+            }
+            if (items.Count == 0)
+                throw new System.Exception("object.json 里没有解析到任何物品（应为 {\"id\": {\"image\": \"路径\"}} 结构）");
+            return items;
         }
 
         // ---------------- 材质烘焙 ----------------
@@ -304,7 +455,10 @@ namespace RollABallEditorTools
                 existing.blockMaterials = parsed.blockMaterials;
                 existing.blockModels = parsed.blockModels;
                 existing.blockItemMaterials = parsed.blockItemMaterials;
+                existing.blockObjectIds = parsed.blockObjectIds;
                 existing.blockSideMaterial = parsed.blockSideMaterial;
+                existing.taskIds = parsed.taskIds;
+                existing.taskNum = parsed.taskNum;
                 EditorUtility.SetDirty(existing);
             }
             else

@@ -1,0 +1,8 @@
+{
+  "corn": {
+    "image": "cube_images/corn.png"
+  },
+  "tomato": {
+    "image": "cube_images/tomato.png"
+  }
+}

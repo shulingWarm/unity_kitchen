@@ -10,9 +10,18 @@
 0	0	0	0	0	0	0	0	0	0
 0	0	0	0	0	0	0	0	0	0
 
-w1: 
-cube_images/tomato.png
-cube_images/tomato.fbx
-w2: 
-cube_images/corn.png
-cube_images/corn.fbx
+w1:
+image:  cube_images/tomato.png
+model:  cube_images/tomato.fbx
+object: tomato
+
+w2:
+image:  cube_images/corn.png
+model:  cube_images/corn.fbx
+object: corn
+
+tasks:
+corn
+tomato
+
+task_num:3

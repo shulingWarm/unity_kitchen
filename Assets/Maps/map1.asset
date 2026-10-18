@@ -41,5 +41,12 @@ MonoBehaviour:
   blockItemMaterials:
   - {fileID: 2100000, guid: 873f44b3feca7ef42a667cd2a67da2c5, type: 2}
   - {fileID: 2100000, guid: ffec0d1893655c14a982169526cef787, type: 2}
+  blockObjectIds:
+  - tomato
+  - corn
   blockSideMaterial: {fileID: 2100000, guid: 04391d8163760f848af2aa73634293fd, type: 2}
   spawnCell: {x: 2, y: 4}
+  taskIds:
+  - corn
+  - tomato
+  taskNum: 3

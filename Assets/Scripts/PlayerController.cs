@@ -6,8 +6,9 @@ namespace RollABall
     /// <summary>
     /// 玩家（人形角色）：读取虚拟摇杆输入做相机相对移动，
     /// 模型朝移动方向转身，Animator 按移动状态切换 Idle/Walk。
-    /// 抓取：点击抓取按钮时从最近的木箱拿出对应食材模型（图例第二字段），双手 IK 捧在身前。
-    /// 胜利条件：暂无（收集玩法已移除）。
+    /// 抓取：点击抓取按钮时空手从最近的木箱拿出对应食材模型（图例字段），双手 IK 捧在身前。
+    /// 交付：手持物品时按同一按钮 → 走到出餐口旁交付；物品必定被消耗，
+    /// 命中任务卡（TaskCardsUI）则完成该任务，未命中就是白交（惩罚乱交）。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerController : MonoBehaviour
@@ -29,6 +30,8 @@ namespace RollABall
 
         private Rigidbody rb;
         private GameObject heldItem;      // 手上的物品（挂在胸部骨骼上，null = 空手）
+        private string heldObjectId;      // 手持物品的物品 id（object.json，交付时与任务卡匹配）
+        private TaskCardsUI taskCards;    // 交付时延迟查找（场景重启后自动重找）
 
         private static Material itemMaterial;
 
@@ -86,10 +89,10 @@ namespace RollABall
 
         // ---------------- 抓取 ----------------
 
-        /// <summary>抓取按钮回调。空手且附近有木箱时，取出对应食材模型：人形捧在双手里，猫咪叼在嘴里。</summary>
+        /// <summary>交互按钮回调：空手在木箱旁拿食材（人形捧/猫咪叼）；手持物品在出餐口旁交付。</summary>
         public void TryGrab()
         {
-            if (heldItem != null) return;                       // 手上已有物品：第一版不做任何处理
+            if (heldItem != null) { TryServe(); return; }
             if (mapLoader == null) return;
 
             MapLoader.BoxSlot slot = FindNearestBox();
@@ -138,6 +141,7 @@ namespace RollABall
 
         private void BuildHeldItem(MapLoader.BoxSlot slot)
         {
+            heldObjectId = slot.objectId;                       // 记录拿到的物品 id（交付时与任务卡匹配）
             heldItem = slot.itemModel != null
                 ? Instantiate(slot.itemModel)                   // 图例 model 字段指定的食材模型
                 : CreateFallbackSphere();                       // 模型缺失时的兜底（导入器通常已保证存在）
@@ -148,6 +152,47 @@ namespace RollABall
 
             FixMissingTextures(heldItem, slot.fallbackMaterial);
             NormalizeSize(heldItem, itemRadius * 2f);           // 不管 fbx 原始多大，统一缩到手持尺寸
+        }
+
+        private Transform FindNearestServingStation()
+        {
+            Transform nearest = null;
+            float best = grabRange * grabRange;
+            foreach (var station in mapLoader.ServingStations)
+            {
+                if (station == null) continue;
+                float dxz = Vector2.SqrMagnitude(new Vector2(
+                    station.position.x - transform.position.x,
+                    station.position.z - transform.position.z));
+                if (dxz <= best) { best = dxz; nearest = station; }
+            }
+            return nearest;
+        }
+
+        /// <summary>
+        /// 手持物品在出餐口交付：物品必定被收走；命中任务卡才算完成，未命中就是白交。
+        /// </summary>
+        private void TryServe()
+        {
+            if (mapLoader == null) return;
+            Transform station = FindNearestServingStation();
+            if (station == null) return;                        // 附近没有出餐口：无处安放，忽略
+
+            string objectId = heldObjectId;
+            ClearHeldItem();                                    // 物品被收走（无论是否命中任务）
+
+            if (taskCards == null) taskCards = FindFirstObjectByType<TaskCardsUI>();
+            bool served = taskCards != null && taskCards.TryServe(objectId);
+            Debug.Log(served
+                ? $"[Player] 交付 {objectId}：任务完成"
+                : $"[Player] 交付 {objectId}：没有任务需要它，白交了");
+        }
+
+        private void ClearHeldItem()
+        {
+            if (heldItem != null) Destroy(heldItem);
+            heldItem = null;
+            heldObjectId = null;
         }
 
         /// <summary>图例缺模型时的兜底：原来的绿色小球。</summary>

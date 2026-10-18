@@ -11,10 +11,11 @@ namespace RollABall
     /// </summary>
     public class MapLoader : MonoBehaviour
     {
-        /// <summary>木箱槽位：box = 箱体；itemModel = 从箱中取出的食材模型；fallbackMaterial = 模型缺贴图时的兜底材质。</summary>
+        /// <summary>木箱槽位：box = 箱体；objectId = 对应物品 id；itemModel = 取出的食材模型；fallbackMaterial = 模型缺贴图时的兜底材质。</summary>
         public struct BoxSlot
         {
             public Transform box;
+            public string objectId;
             public GameObject itemModel;
             public Material fallbackMaterial;
         }
@@ -34,10 +35,14 @@ namespace RollABall
         /// 运行时生成的所有木箱（抓取功能的距离查询用）
         public List<BoxSlot> Boxes { get; } = new List<BoxSlot>();
 
+        /// 运行时生成的所有出餐口（交付任务的距离查询用）
+        public List<Transform> ServingStations { get; } = new List<Transform>();
+
         private string[,] cells;         // 预拆分的 token 网格
         private Dictionary<string, Material> boxTopMaterials;
         private Dictionary<string, GameObject> boxItemModels;
         private Dictionary<string, Material> boxItemFallbackMaterials;
+        private Dictionary<string, string> boxObjectIds;
 
         private void Awake()
         {
@@ -75,6 +80,7 @@ namespace RollABall
             boxTopMaterials = new Dictionary<string, Material>();
             boxItemModels = new Dictionary<string, GameObject>();
             boxItemFallbackMaterials = new Dictionary<string, Material>();
+            boxObjectIds = new Dictionary<string, string>();
             if (map.blockTypes == null) return;
 
             for (int i = 0; i < map.blockTypes.Length; i++)
@@ -86,6 +92,8 @@ namespace RollABall
                     boxItemModels[token] = map.blockModels[i];
                 if (map.blockItemMaterials != null && i < map.blockItemMaterials.Length)
                     boxItemFallbackMaterials[token] = map.blockItemMaterials[i];
+                if (map.blockObjectIds != null && i < map.blockObjectIds.Length)
+                    boxObjectIds[token] = map.blockObjectIds[i];
             }
         }
 
@@ -145,13 +153,20 @@ namespace RollABall
             box.GetComponent<Renderer>().sharedMaterial =
                 map.blockSideMaterial != null ? map.blockSideMaterial : wallMaterial;
 
-            // 取出物品模型（图例第二字段）；缺失时记 null，抓取端回退绿色小球
+            // 取出物品模型（图例 model 字段）；缺失时记 null，抓取端回退绿色小球
             GameObject itemModel;
             if (!boxItemModels.TryGetValue(token, out itemModel) || itemModel == null)
                 Debug.LogWarning($"[MapLoader] {token} 缺少取出物品模型，抓取时将回退绿色小球");
+            boxObjectIds.TryGetValue(token, out string objectId);
             Material fallbackMat;
             boxItemFallbackMaterials.TryGetValue(token, out fallbackMat);
-            Boxes.Add(new BoxSlot { box = box.transform, itemModel = itemModel, fallbackMaterial = fallbackMat });
+            Boxes.Add(new BoxSlot
+            {
+                box = box.transform,
+                objectId = objectId,
+                itemModel = itemModel,
+                fallbackMaterial = fallbackMat,
+            });
 
             // 顶面图片：Quad 盖在顶面（抬高 0.002 防 Z-fighting），Quad 的碰撞体去掉
             Material topMat;
@@ -202,6 +217,7 @@ namespace RollABall
             top.transform.localRotation = Quaternion.Euler(90f, yaw, 0f);
             top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
             top.AddComponent<ConveyorScroller>();
+            ServingStations.Add(counter.transform);
         }
 
         private void PlacePlayer()

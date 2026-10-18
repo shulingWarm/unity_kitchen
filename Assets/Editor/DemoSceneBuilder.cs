@@ -115,7 +115,7 @@ namespace RollABallEditorTools
             player.GetComponent<PlayerController>().mapLoader = loader;   // 抓取时查木箱列表
 
             // ---- UI ----
-            BuildUI(player);
+            BuildUI(player, loader);
 
             // ---- 灯光角度微调 ----
             var light = Object.FindFirstObjectByType<Light>();
@@ -162,11 +162,11 @@ namespace RollABallEditorTools
                 "现在切换构建平台到 Android？会触发资源重导入（几分钟）。", "切换", "暂不");
 
             if (ok)
-                EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTarget.Android);
+                EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
         }
 
         // ---------------- UI 构建 ----------------
-        private static void BuildUI(GameObject player)
+        private static void BuildUI(GameObject player, MapLoader loader)
         {
             var canvasGO = new GameObject("Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
             var canvas = canvasGO.GetComponent<Canvas>();
@@ -254,9 +254,8 @@ namespace RollABallEditorTools
             // 倒计时条（右下角，UI 由组件运行时自建）
             new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
 
-            // 订单卡信息牌（左上角，UI 由组件运行时自建，并注入项目菜品图片）
-            var orderUi = new GameObject("OrderCardsUI", typeof(OrderCardsUI)).GetComponent<OrderCardsUI>();
-            OrderCardsScenePatcher.AssignIcons(orderUi);
+            // 任务卡信息牌（左上角，UI 由组件运行时自建，并注入 MapLoader / ItemRegistry 引用）
+            TaskCardsScenePatcher.CreateTaskCards(loader);
         }
 
         private static GameObject CreateText(Transform parent, string name, string content, Font font, int size, Color color)
