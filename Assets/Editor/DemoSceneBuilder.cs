@@ -256,6 +256,9 @@ namespace RollABallEditorTools
                 Debug.LogWarning($"[DemoSceneBuilder] 找不到 {GrabIconPath}，抓取按钮只有圆环");
             }
 
+            // 投掷按钮（抓取按钮左侧，同款圆环 + throw.png 图标）
+            TaskCardsScenePatcher.CreateThrowButton(canvas, player.GetComponent<PlayerController>());
+
             // 倒计时条（右下角，UI 由组件运行时自建）
             new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
 
@@ -541,7 +544,7 @@ namespace RollABallEditorTools
         }
 
         /// 抓取按钮的白色圆环（程序化生成，空心带抗锯齿）
-        private static Sprite GetOrCreateRingSprite()
+        public static Sprite GetOrCreateRingSprite()
         {
             const string RingPath = "Assets/UI/button_ring.png";
             if (AssetDatabase.LoadAssetAtPath<Object>(RingPath) == null)
@@ -572,7 +575,7 @@ namespace RollABallEditorTools
         }
 
         /// 强制把贴图导入为 UI Sprite 模式（用户手放的 PNG 默认是 Texture 类型，UI Image 读不到）
-        private static void ForceSpriteImport(string path)
+        public static void ForceSpriteImport(string path)
         {
             if (AssetImporter.GetAtPath(path) is TextureImporter ti &&
                 (ti.textureType != TextureImporterType.Sprite || !ti.alphaIsTransparency || ti.mipmapEnabled))

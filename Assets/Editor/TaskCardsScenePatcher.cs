@@ -1,7 +1,9 @@
+using System.IO;
 using RollABall;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace RollABallEditorTools
 {
@@ -17,6 +19,7 @@ namespace RollABallEditorTools
         private const string RegistryPath = "Assets/GameInfo/ItemRegistry.asset";
         private const string LevelRegistryPath = "Assets/GameInfo/LevelRegistry.asset";
         private const string HouseFolder = "Assets/House/RestaurantBits";
+        private const string ThrowIconPath = "Assets/UI/button_icon/throw.png";
 
         [MenuItem("Tools/Roll-a-Ball/5 - 给场景添加任务卡、积分与结算面板")]
         public static void AddTaskCardsToDemoScene()
@@ -43,6 +46,12 @@ namespace RollABallEditorTools
             var ui = CreateTaskCards(loader);
             new GameObject("ScoreUI", typeof(ScoreUI));   // 左下角积分面板（无引用需要注入）
             CreateGameFlow(loader);
+
+            // 投掷按钮（已存在时只重新注入引用）
+            var canvas = Object.FindFirstObjectByType<Canvas>();
+            var pc = loader.player != null ? loader.player.GetComponent<PlayerController>() : null;
+            if (canvas != null && pc != null) CreateThrowButton(canvas, pc);
+            else Debug.LogWarning("[TaskCardsScenePatcher] 场景缺少 Canvas 或 player 引用，投掷按钮未创建");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -99,6 +108,61 @@ namespace RollABallEditorTools
             flow.mapLoader = loader;
             flow.levelRegistry = loader.levelRegistry;
             return flow;
+        }
+
+        /// <summary>
+        /// 创建投掷按钮（抓取按钮左侧，同款圆环 + throw.png 图标）。
+        /// 已存在时仅重新注入玩家引用；图标缺失时只有圆环不阻塞。
+        /// </summary>
+        public static GameObject CreateThrowButton(Canvas canvas, PlayerController player)
+        {
+            var existing = Object.FindFirstObjectByType<ThrowButton>(FindObjectsInactive.Include);
+            if (existing != null)
+            {
+                existing.player = player;
+                return existing.gameObject;
+            }
+
+            var go = new GameObject("ThrowButton",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(ThrowButton));
+            go.GetComponent<ThrowButton>().player = player;
+            go.transform.SetParent(canvas.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(1f, 0f);
+            rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(150f, 150f);
+            rt.anchoredPosition = new Vector2(-330f, 150f);   // 抓取按钮（-160,185）左侧错位
+            var img = go.GetComponent<Image>();
+            img.sprite = DemoSceneBuilder.GetOrCreateRingSprite();
+            img.color = new Color(1f, 1f, 1f, 0.5f);
+
+            if (File.Exists(ThrowIconPath))
+            {
+                DemoSceneBuilder.ForceSpriteImport(ThrowIconPath);
+                var iconSprite = AssetDatabase.LoadAssetAtPath<Sprite>(ThrowIconPath);
+                if (iconSprite != null)
+                {
+                    var iconGO = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                    iconGO.transform.SetParent(go.transform, false);
+                    var iconRt = (RectTransform)iconGO.transform;
+                    iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0.5f, 0.5f);
+                    iconRt.sizeDelta = new Vector2(98f, 98f);   // 外径 150 的 65%
+                    var iconImg = iconGO.GetComponent<Image>();
+                    iconImg.sprite = iconSprite;
+                    iconImg.color = new Color(1f, 1f, 1f, 0.5f);
+                    iconImg.raycastTarget = false;
+                }
+                else
+                {
+                    Debug.LogWarning($"[TaskCardsScenePatcher] {ThrowIconPath} 导入后拿不到 Sprite，投掷按钮只有圆环");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[TaskCardsScenePatcher] 找不到 {ThrowIconPath}，投掷按钮只有圆环");
+            }
+            return go;
         }
     }
 }

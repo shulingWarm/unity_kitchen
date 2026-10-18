@@ -9,6 +9,7 @@ namespace RollABall
     /// 抓取/放置/拾取/交付共用一个按钮，按状态自动分流：
     /// 手持物品 → 出餐口旁交付（物品必消耗，命中任务卡才算完成）；否则原地放下（物理自由落体）。
     /// 空手 → 先捡起近处地面物品（WorldItem），没有才从最近的木箱拿对应食材模型。
+    /// 投掷（独立按钮）：沿玩家朝向把手中物品抛物线抛出，落地后成为可再拾取的地面物品。
     /// 手持物品统一挂在胸口骨骼上、双手 IK 捧住。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
@@ -29,6 +30,10 @@ namespace RollABall
         public float grabRange = 3f;      // 距离箱子/出餐口多远以内可以交互
         public float pickupRange = 1.5f;  // 拾取地面物品的距离（要贴近才捡）
         public float itemRadius = 0.18f;  // 手持物品目标半径：模型最大边长归一化到 itemRadius*2，IK 抓握距离也按它算
+
+        [Header("投掷")]
+        public float throwForwardSpeed = 5f;   // 水平初速（决定远近）
+        public float throwUpSpeed = 4.5f;      // 竖直初速：出手 1.1m + 弧顶 ~1m，全程越过 1m 内墙
 
         private Rigidbody rb;
         private GameObject heldItem;      // 手上的物品（挂在胸部骨骼上，null = 空手）
@@ -202,22 +207,45 @@ namespace RollABall
             return nearest;
         }
 
-        /// <summary>
-        /// 把手里的物品原地放下：脱离骨骼并物理化（包围盒碰撞体 + 刚体），
-        /// 自由落体允许翻滚，落地后成为 WorldItem 可再拾取。物品 id 原样保留。
-        /// </summary>
+        /// <summary>把手里的物品原地放下：轻抛落地，自由翻滚，成为可再拾取的地面物品。</summary>
         private void DropHeldItem()
+        {
+            Vector3 forward = modelPivot != null ? modelPivot.forward : transform.forward;
+            Vector3 position = heldItem.transform.position + forward * 0.4f;   // 送出避免卡在玩家碰撞体内
+            ReleaseHeldItem(position,
+                (forward + Vector3.up * 0.5f) * 1.2f,
+                new Vector3(Random.Range(-2f, 2f), Random.Range(-1f, 1f), Random.Range(-2f, 2f)));
+        }
+
+        /// <summary>
+        /// 投掷：把手里的物品沿玩家当前朝向抛出（抛物线飞行）。
+        /// 出手点约 1.1m（胸口），弧顶再抬 ~1m，全程越过 1m 内墙但越不过房屋外墙；
+        /// 落地后成为可拾取的地面物品。投掷本身不消耗物品、不影响任务。
+        /// </summary>
+        public void Throw()
+        {
+            if (heldItem == null) return;
+
+            Vector3 forward = modelPivot != null ? modelPivot.forward : transform.forward;
+            forward.y = 0f;
+            forward.Normalize();
+
+            Vector3 position = transform.position + Vector3.up * 1.1f + forward * 0.4f;
+            ReleaseHeldItem(position,
+                forward * throwForwardSpeed + Vector3.up * throwUpSpeed,
+                new Vector3(Random.Range(-3f, 3f), Random.Range(-1f, 1f), Random.Range(-3f, 3f)));
+        }
+
+        /// <summary>把手中物品物理化释放：脱离骨骼、加包围盒碰撞体与刚体、登记为地面物品。</summary>
+        private GameObject ReleaseHeldItem(Vector3 position, Vector3 velocity, Vector3 torque)
         {
             GameObject item = heldItem;
             string objectId = heldObjectId;
             heldItem = null;
             heldObjectId = null;
 
-            item.transform.SetParent(null, true);   // 脱离骨骼，保留世界位姿
-
-            // 稍微向前送出，避免落在玩家碰撞体内被挤开
-            Vector3 forward = modelPivot != null ? modelPivot.forward : transform.forward;
-            item.transform.position += forward * 0.4f;
+            item.transform.SetParent(null, true);   // 脱离骨骼
+            item.transform.position = position;
 
             var col = item.AddComponent<BoxCollider>();
             Bounds local = ComputeRoughLocalBounds(item);
@@ -226,13 +254,13 @@ namespace RollABall
 
             var rb = item.AddComponent<Rigidbody>();
             rb.interpolation = RigidbodyInterpolation.Interpolate;
-            rb.AddForce((forward + Vector3.up * 0.5f) * 1.2f, ForceMode.VelocityChange);   // 一点抛掷感
-            rb.AddTorque(new Vector3(Random.Range(-2f, 2f), Random.Range(-1f, 1f), Random.Range(-2f, 2f)),
-                ForceMode.VelocityChange);                                                  // 自由翻滚
+            rb.AddForce(velocity, ForceMode.VelocityChange);
+            rb.AddTorque(torque, ForceMode.VelocityChange);
 
             var worldItem = item.AddComponent<WorldItem>();
             worldItem.objectId = objectId;
             item.name = "GroundItem";
+            return item;
         }
 
         /// <summary>拾取地上的物品：清掉物理组件挂回胸口骨骼，恢复手持状态（含物品 id）。</summary>
