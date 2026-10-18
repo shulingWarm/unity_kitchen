@@ -256,6 +256,9 @@ namespace RollABallEditorTools
 
             // 任务卡信息牌（左上角，UI 由组件运行时自建，并注入 MapLoader / ItemRegistry 引用）
             TaskCardsScenePatcher.CreateTaskCards(loader);
+
+            // 积分面板（左下角，UI 由组件运行时自建）
+            new GameObject("ScoreUI", typeof(ScoreUI));
         }
 
         private static GameObject CreateText(Transform parent, string name, string content, Font font, int size, Color color)

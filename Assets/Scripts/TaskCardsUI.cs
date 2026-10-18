@@ -7,8 +7,8 @@ namespace RollABall
     /// <summary>
     /// 左上角任务卡（胡闹厨房风格）：开局按地图 task_num 从任务池随机抽卡，
     /// 每张卡只要求 1 个物品；完成或超时作废后立刻随机补一张新卡，始终保持驻留数。
-    /// 交付由 PlayerController 在出餐口触发 TryServe：命中同物品的任务卡即完成；
-    /// 未命中时物品由交付方直接消耗（惩罚乱交），这里只负责回答"命中与否"。
+    /// 交付由 PlayerController 在出餐口触发 TryServe：命中同物品的任务卡即完成（加分）；
+    /// 未命中时物品由交付方直接消耗（惩罚乱交，不计分），这里只负责回答"命中与否"。
     /// 物品图标查 ItemRegistry（object.json 导入时烘焙）；UI 全部运行时自建。
     /// </summary>
     public class TaskCardsUI : MonoBehaviour
@@ -48,6 +48,7 @@ namespace RollABall
         private readonly List<Task> _tasks = new List<Task>();
         private readonly Dictionary<string, Sprite> _iconCache = new Dictionary<string, Sprite>();
         private Canvas _canvas;
+        private ScoreUI _scoreUI;           // 交付命中/超时作废时计入积分（延迟查找）
         private float _urgentBelow = 10f;   // 剩余时间低于该值时进度条变红
 
         private void Start()
@@ -77,6 +78,10 @@ namespace RollABall
             for (int i = 0; i < map.taskNum; i++)
                 DrawNewTask();
             ReflowSlots();
+
+            _scoreUI = FindFirstObjectByType<ScoreUI>();
+            if (_scoreUI == null)
+                Debug.LogWarning("[TaskCardsUI] 场景里没有 ScoreUI，本局不计分（跑菜单 5 重建 UI）");
         }
 
         private void Update()
@@ -91,6 +96,7 @@ namespace RollABall
                 {
                     RemoveTask(t);      // 超时作废
                     DrawNewTask();      // 立刻补一张
+                    if (_scoreUI != null) _scoreUI.AddTimeout();   // 超时扣分
                     anyExpired = true;
                 }
             }
@@ -112,6 +118,7 @@ namespace RollABall
             RemoveTask(task);
             DrawNewTask();
             ReflowSlots();
+            if (_scoreUI != null) _scoreUI.AddDelivery();   // 成功送出一餐，加分
             return true;
         }
 
