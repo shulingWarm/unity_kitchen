@@ -4,7 +4,8 @@ using UnityEngine.UI;
 namespace RollABall
 {
     /// <summary>
-    /// 左下角积分面板：显示当前积分。分值由地图的任务定义决定（完成 +success，超时 -fail），
+    /// 左下角积分面板：显示「积分: 当前/目标」，目标分来自地图 goal 字段。
+    /// 分值由地图的任务定义决定（完成 +success，超时 -fail），
     /// TaskCardsUI 调 Add(delta) 记账，允许扣到负分；白交（未命中任务）不计分。
     /// 当前分数通过 Score 属性暴露（GameFlowUI 做胜利判定用）；
     /// 每局重新开始（场景重载）分数自动归零。UI 运行时自建。
@@ -16,9 +17,13 @@ namespace RollABall
 
         private Text _label;
         private int _score;
+        private int _goal;   // 本关目标分（地图 goal，Start 时读取）
 
         private void Start()
         {
+            var loader = FindFirstObjectByType<MapLoader>();
+            if (loader != null && loader.map != null) _goal = loader.map.goal;
+
             var canvas = FindFirstObjectByType<Canvas>();
             if (canvas == null)
             {
@@ -41,7 +46,8 @@ namespace RollABall
 
         private void Refresh()
         {
-            if (_label != null) _label.text = $"积分: {_score}";
+            if (_label == null) return;
+            _label.text = _goal > 0 ? $"积分: {_score}/{_goal}" : $"积分: {_score}";
         }
 
         // ---------------- UI 自建 ----------------
@@ -56,7 +62,7 @@ namespace RollABall
             rt.anchorMax = new Vector2(0f, 0f);
             rt.pivot = new Vector2(0f, 0f);
             rt.anchoredPosition = new Vector2(20f, 20f);
-            rt.sizeDelta = new Vector2(170f, 56f);
+            rt.sizeDelta = new Vector2(230f, 56f);
             panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.55f);
 
             // 积分文字
@@ -70,7 +76,7 @@ namespace RollABall
             _label = textGO.GetComponent<Text>();
             _label.text = "积分: 0";
             _label.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            _label.fontSize = 30;
+            _label.fontSize = 28;
             _label.fontStyle = FontStyle.Bold;
             _label.color = Color.white;
             _label.alignment = TextAnchor.MiddleCenter;
