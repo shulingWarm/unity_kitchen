@@ -1,3 +1,4 @@
+using System.IO;
 using System.Linq;
 using RollABall;
 using UnityEditor;
@@ -21,6 +22,19 @@ namespace RollABallEditorTools
         public static void ReplacePlayerModelWithChibiBoy()
         {
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            ApplyChibiBoyToScene();
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log($"[ChibiBoyPatcher] 已替换为豆豆男孩并保存 {ScenePath}");
+        }
+
+        /// <summary>
+        /// 给当前已打开场景的玩家换上豆豆男孩（幂等）：
+        /// 骨骼 Humanoid 导入、材质、四状态动画、手部 IK、身高贴地归一化。
+        /// 不开场景不存盘，供菜单 8 与 DemoSceneBuilder 构建流程复用。
+        /// </summary>
+        public static void ApplyChibiBoyToScene()
+        {
             EnsureHumanoidImport();
 
             var pc = Object.FindFirstObjectByType<PlayerController>();
@@ -71,25 +85,30 @@ namespace RollABallEditorTools
             var oldProcedural = boy.GetComponent<CatPlayerModel>();
             if (oldProcedural != null) Object.DestroyImmediate(oldProcedural);
 
-            EditorSceneManager.MarkSceneDirty(scene);
-            EditorSceneManager.SaveScene(scene);
-            Debug.Log($"[ChibiBoyPatcher] 玩家形象已替换为豆豆男孩（目标高度 {targetHeight:F2}m，四状态动画绑定）并保存 {ScenePath}");
+            Debug.Log($"[ChibiBoyPatcher] 玩家形象已替换为豆豆男孩（目标高度 {targetHeight:F2}m，四状态动画绑定）");
         }
 
         [MenuItem("Tools/Roll-a-Ball/9 - 修正行走动作的骨骼配置")]
         public static void MatchWalkAnimationAvatar()
         {
-            var avatar = LoadChibiAvatar();
-            DumpAvatarMapping();
-
             const string walkPath = "Assets/Models/Walking.fbx";
             var importer = AssetImporter.GetAtPath(walkPath) as ModelImporter;
             if (importer == null) { Debug.LogError($"[ChibiBoyPatcher] 未找到 {walkPath}"); return; }
 
-            importer.animationType = ModelImporterAnimationType.Human;
-            importer.sourceAvatar = avatar;   // 动作按豆豆男孩的骨骼长度重定向
-            importer.SaveAndReimport();
-            Debug.Log("[ChibiBoyPatcher] Walking.fbx 的 Avatar 配置已对齐豆豆男孩");
+            // 不拷贝豆豆男孩的 rig：两边骨骼命名不同（Walking 是 mixamorig:*，ChibiBoy 是 Hip 等），
+            // 拷贝必然报 "Transform hierarchy does not match"。
+            // Humanoid 动画走肌肉空间自动重定向，Walking.fbx 用自己的自动映射即可在豆豆男孩上正常播放。
+            if (importer.animationType != ModelImporterAnimationType.Human || importer.sourceAvatar != null)
+            {
+                importer.animationType = ModelImporterAnimationType.Human;
+                importer.sourceAvatar = null;
+                importer.SaveAndReimport();
+                Debug.Log("[ChibiBoyPatcher] Walking.fbx 已重置为 Humanoid 自动映射（骨骼命名与豆豆男孩不同，不做 rig 拷贝）");
+            }
+            else
+            {
+                Debug.Log("[ChibiBoyPatcher] Walking.fbx 已是 Humanoid 自动映射，无需修正");
+            }
         }
 
         /// <summary>导出 Avatar 的骨骼映射表到 TMP/avatar_mapping.txt（诊断左脚滑步用）。</summary>
@@ -101,8 +120,13 @@ namespace RollABallEditorTools
             var lines = human
                 .Where(h => h.humanName.Contains("Leg") || h.humanName.Contains("Foot") || h.humanName.Contains("Toe"))
                 .Select(h => $"{h.humanName}  <=  {h.boneName}");
-            System.IO.File.WriteAllLines("D:/Projects/github/TMP/avatar_mapping.txt", lines);
-            Debug.Log($"[ChibiBoyPatcher] 腿部映射已导出（共 {human.Length} 项映射）");
+
+            // 写到工程目录内（原硬编码路径 D:/Projects/github/TMP 在其他机器上不存在）
+            string projectRoot = Directory.GetParent(Application.dataPath)!.FullName;
+            string dumpPath = Path.Combine(projectRoot, "TMP", "avatar_mapping.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(dumpPath)!);
+            File.WriteAllLines(dumpPath, lines);
+            Debug.Log($"[ChibiBoyPatcher] 腿部映射已导出（共 {human.Length} 项映射）→ {dumpPath}");
         }
 
         private static Avatar LoadChibiAvatar()

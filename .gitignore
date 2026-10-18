@@ -31,3 +31,6 @@ Thumbs.db
 
 # === Unity 崩溃报告 ===
 sysinfo.txt
+
+# 诊断导出（ChibiBoyPatcher 菜单 10）
+TMP/
