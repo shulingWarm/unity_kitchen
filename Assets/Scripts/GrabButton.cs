@@ -4,8 +4,8 @@ using UnityEngine.UI;
 namespace RollABall
 {
     /// <summary>
-    /// 抓取按钮：点击触发玩家的抓取/交付尝试。
-    /// 空手在木箱旁 → 拿取；手持物品在出餐口旁 → 交付；其余情况玩家内部直接忽略，不做任何表现。
+    /// 抓取按钮：情境交互键，点击触发玩家的交互尝试，由玩家内部按状态分流——
+    /// 手持 → 出餐口旁交付 / 就地放下；空手 → 捡起地面物品 / 从木箱拿取；其余忽略。
     /// </summary>
     [RequireComponent(typeof(Button))]
     public class GrabButton : MonoBehaviour

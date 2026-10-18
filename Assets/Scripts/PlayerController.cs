@@ -6,9 +6,10 @@ namespace RollABall
     /// <summary>
     /// 玩家（人形角色）：读取虚拟摇杆输入做相机相对移动，
     /// 模型朝移动方向转身，Animator 按移动状态切换 Idle/Walk。
-    /// 抓取：点击抓取按钮时空手从最近的木箱拿出对应食材模型（图例字段），双手 IK 捧在身前。
-    /// 交付：手持物品时按同一按钮 → 走到出餐口旁交付；物品必定被消耗，
-    /// 命中任务卡（TaskCardsUI）则完成该任务，未命中就是白交（惩罚乱交）。
+    /// 抓取/放置/拾取/交付共用一个按钮，按状态自动分流：
+    /// 手持物品 → 出餐口旁交付（物品必消耗，命中任务卡才算完成）；否则原地放下（物理自由落体）。
+    /// 空手 → 先捡起近处地面物品（WorldItem），没有才从最近的木箱拿对应食材模型。
+    /// 手持物品统一挂在胸口骨骼上、双手 IK 捧住。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerController : MonoBehaviour
@@ -24,8 +25,9 @@ namespace RollABall
         public bool IsCarrying => heldItem != null;
 
         [Header("抓取")]
-        public MapLoader mapLoader;       // 木箱列表来源
-        public float grabRange = 3f;      // 距离箱子多远以内可以拿
+        public MapLoader mapLoader;       // 木箱/出餐口列表来源
+        public float grabRange = 3f;      // 距离箱子/出餐口多远以内可以交互
+        public float pickupRange = 1.5f;  // 拾取地面物品的距离（要贴近才捡）
         public float itemRadius = 0.18f;  // 手持物品目标半径：模型最大边长归一化到 itemRadius*2，IK 抓握距离也按它算
 
         private Rigidbody rb;
@@ -87,13 +89,26 @@ namespace RollABall
             return (camRight * input.x + camForward * input.y).normalized;
         }
 
-        // ---------------- 抓取 ----------------
+        // ---------------- 抓取 / 放置 / 拾取 / 交付 ----------------
 
-        /// <summary>交互按钮回调：空手在木箱旁拿食材（人形捧/猫咪叼）；手持物品在出餐口旁交付。</summary>
+        /// <summary>
+        /// 交互按钮回调：按状态分流。
+        /// 手持 → 出餐口旁交付，否则原地放下；空手 → 捡起地面物品（优先），没有才从木箱拿。
+        /// </summary>
         public void TryGrab()
         {
-            if (heldItem != null) { TryServe(); return; }
-            if (mapLoader == null) return;
+            if (heldItem != null)
+            {
+                if (mapLoader == null) return;
+                if (FindNearestServingStation() != null) { TryServe(); return; }   // 出餐优先
+                DropHeldItem();                                                    // 就地放下
+                return;
+            }
+
+            if (mapLoader == null) return;   // 不判空 animator：猫咪路径只有嘴部锚点
+
+            WorldItem ground = FindNearestGroundItem();
+            if (ground != null) { PickUp(ground); return; }    // 地上物品优先于木箱
 
             MapLoader.BoxSlot slot = FindNearestBox();
             if (slot.box == null) return;                       // 附近没有木箱：不响应
@@ -167,6 +182,95 @@ namespace RollABall
                 if (dxz <= best) { best = dxz; nearest = station; }
             }
             return nearest;
+        }
+
+        // ---------------- 放置 / 拾取 ----------------
+
+        /// <summary>就近找地面物品（WorldItem.All 登记，pickupRange 内）。</summary>
+        private WorldItem FindNearestGroundItem()
+        {
+            WorldItem nearest = null;
+            float best = pickupRange * pickupRange;
+            foreach (var item in WorldItem.All)
+            {
+                if (item == null) continue;
+                float dxz = Vector2.SqrMagnitude(new Vector2(
+                    item.transform.position.x - transform.position.x,
+                    item.transform.position.z - transform.position.z));
+                if (dxz <= best) { best = dxz; nearest = item; }
+            }
+            return nearest;
+        }
+
+        /// <summary>
+        /// 把手里的物品原地放下：脱离骨骼并物理化（包围盒碰撞体 + 刚体），
+        /// 自由落体允许翻滚，落地后成为 WorldItem 可再拾取。物品 id 原样保留。
+        /// </summary>
+        private void DropHeldItem()
+        {
+            GameObject item = heldItem;
+            string objectId = heldObjectId;
+            heldItem = null;
+            heldObjectId = null;
+
+            item.transform.SetParent(null, true);   // 脱离骨骼，保留世界位姿
+
+            // 稍微向前送出，避免落在玩家碰撞体内被挤开
+            Vector3 forward = modelPivot != null ? modelPivot.forward : transform.forward;
+            item.transform.position += forward * 0.4f;
+
+            var col = item.AddComponent<BoxCollider>();
+            Bounds local = ComputeRoughLocalBounds(item);
+            col.center = local.center;
+            col.size = local.size;
+
+            var rb = item.AddComponent<Rigidbody>();
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.AddForce((forward + Vector3.up * 0.5f) * 1.2f, ForceMode.VelocityChange);   // 一点抛掷感
+            rb.AddTorque(new Vector3(Random.Range(-2f, 2f), Random.Range(-1f, 1f), Random.Range(-2f, 2f)),
+                ForceMode.VelocityChange);                                                  // 自由翻滚
+
+            var worldItem = item.AddComponent<WorldItem>();
+            worldItem.objectId = objectId;
+            item.name = "GroundItem";
+        }
+
+        /// <summary>拾取地上的物品：清掉物理组件挂回胸口骨骼，恢复手持状态（含物品 id）。</summary>
+        private void PickUp(WorldItem ground)
+        {
+            Transform chest = animator.GetBoneTransform(HumanBodyBones.Chest);
+            if (chest == null) chest = animator.GetBoneTransform(HumanBodyBones.Spine);
+            if (chest == null) return;
+
+            GameObject item = ground.gameObject;
+            string objectId = ground.objectId;
+            Destroy(ground);                                    // 先移出地面物品登记
+
+            foreach (var col in item.GetComponentsInChildren<Collider>()) Destroy(col);
+            foreach (var rb in item.GetComponentsInChildren<Rigidbody>()) Destroy(rb);
+
+            item.name = "HeldItem";
+            heldObjectId = objectId;
+            heldItem = item;
+            item.transform.position = chest.position
+                                     + modelPivot.forward * 0.35f
+                                     + Vector3.up * 0.1f;
+            item.transform.SetParent(chest, true);
+            item.transform.localRotation = Quaternion.identity; // 恢复直立持握，和从箱子拿一致
+        }
+
+        /// <summary>所有子网格本地包围盒的粗略合并（放置时的物理近似，不做矩阵精确变换）。</summary>
+        private static Bounds ComputeRoughLocalBounds(GameObject root)
+        {
+            bool hasAny = false;
+            var bounds = new Bounds();
+            foreach (var mf in root.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.sharedMesh == null) continue;
+                if (!hasAny) { bounds = mf.sharedMesh.bounds; hasAny = true; }
+                else bounds.Encapsulate(mf.sharedMesh.bounds);
+            }
+            return hasAny ? bounds : new Bounds(Vector3.zero, Vector3.one * 0.2f);
         }
 
         /// <summary>
