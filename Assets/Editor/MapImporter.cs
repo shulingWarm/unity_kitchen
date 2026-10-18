@@ -14,9 +14,10 @@ namespace RollABallEditorTools
     /// 兼容旧格式：整行无分隔符且长度等于列数时按单字符解析。
     /// 图例区（均在网格行之后，空行随意）：
     ///   「wN:」小节 → image:/model:/object: 三个标签字段（顶图、取出物品 fbx、object.json 物品 id）；
-    ///   「tasks:」小节 → 若干行物品 id，构成本地图任务池；
-    ///   「task_num:N」→ 同时驻留的任务卡数。
+    ///   「tasks:」小节 → 每个任务一个小节「物品id:」+ time:/success:/fail:（限时秒、完成加分、超时扣分）；
+    ///   顶层字段 → task_num:（驻留卡数）、goal:（胜利分数）、total_time:（总时长秒）。
     /// 同时把 Assets/GameInfo/object.json 烘焙成 ItemRegistry.asset（id → 图标），
+    /// 把全部地图按文件名排序烘焙成 LevelRegistry.asset（关卡顺序）；
     /// 图例里的 object:/tasks: 的 id 必须都登记在内。模型缺贴图时的兜底材质
     /// 优先用其同目录的 colormap.png / 同名 png，否则用图例图片。
     /// 资产已存在时覆盖字段（保留 GUID，场景引用不失效）。
@@ -26,11 +27,17 @@ namespace RollABallEditorTools
         private const string AssetFolder = "Assets/Maps";
         private const string GameInfoFolder = "Assets/GameInfo";
         private const string ObjectJsonPath = "Assets/GameInfo/object.json";
-        private const string RegistryAssetPath = "Assets/GameInfo/ItemRegistry.asset";
+        private const string ItemRegistryAssetPath = "Assets/GameInfo/ItemRegistry.asset";
+        private const string LevelRegistryAssetPath = "Assets/GameInfo/LevelRegistry.asset";
+
+        /// <summary>图例区允许的顶层标签字段（其他小节字段行遇到它们即停止收集）。</summary>
+        private static readonly string[] TopLevelFields = { "task_num", "goal", "total_time" };
 
         private static readonly Regex BoxToken = new Regex(@"^w\d+$");
-        private static readonly Regex SectionLine = new Regex(@"^\s*(\w+)\s*:\s*$");   // 小节头：wN: / tasks:
+        private static readonly Regex SectionLine = new Regex(@"^\s*(\w+)\s*:\s*$");   // 小节头：wN: / tasks: / 任务id:
         private static readonly Regex FieldLine = new Regex(@"^\s*(\w+)\s*:\s*(\S.*)$"); // 标签字段：key: value
+
+        private static bool IsTopLevelField(string key) => System.Array.IndexOf(TopLevelFields, key) >= 0;
 
         [MenuItem("Tools/Roll-a-Ball/3 - 导入 maps/ 下的地图文件")]
         public static void ImportMenu()
@@ -84,7 +91,8 @@ namespace RollABallEditorTools
                     okCount++;
                     Debug.Log($"[MapImporter] {assetPath} ← {Path.GetFileName(txtPath)}" +
                               $"（{parsed.rows}x{parsed.cols}，出生点 r{parsed.spawnCell.x} c{parsed.spawnCell.y}，" +
-                              $"木箱类型 {parsed.blockTypes.Length} 种，任务 {parsed.taskIds.Length} 种/驻留 {parsed.taskNum} 张）");
+                              $"木箱类型 {parsed.blockTypes.Length} 种，任务 {parsed.tasks.Length} 种/驻留 {parsed.taskNum} 张，" +
+                              $"目标 {parsed.goal} 分/{parsed.totalTime:0} 秒）");
                 }
                 catch (System.Exception e)
                 {
@@ -92,8 +100,23 @@ namespace RollABallEditorTools
                     Debug.LogError($"[MapImporter] {Path.GetFileName(txtPath)} 导入失败：{e.Message}");
                 }
             }
+
+            // 全部地图处理后烘焙关卡列表（按文件名排序 = 关卡顺序）
+            try
+            {
+                BakeLevelRegistry();
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError($"[MapImporter] 关卡列表烘焙失败：{e.Message}");
+            }
+
             AssetDatabase.SaveAssets();
         }
+
+        /// <summary>供场景生成器调用：返回烘焙好的关卡列表（不存在时为 null）。</summary>
+        public static LevelRegistry GetBakedLevelRegistry()
+            => AssetDatabase.LoadAssetAtPath<LevelRegistry>(LevelRegistryAssetPath);
 
         // ---------------- 解析 ----------------
 
@@ -187,8 +210,10 @@ namespace RollABallEditorTools
             var models = new List<GameObject>();
             var itemMaterials = new List<Material>();
             var objectIds = new List<string>();
-            var taskIds = new List<string>();
+            var taskDefs = new List<MapData.TaskDef>();
             int taskNum = -1;
+            int goal = -1;
+            float totalTime = -1f;
 
             // 所有木箱共用的侧面材质（纯色木棕）
             Material sideMat = GetOrCreatePlainMaterial($"{AssetFolder}/BoxSide.mat", new Color(0.55f, 0.36f, 0.20f));
@@ -205,7 +230,7 @@ namespace RollABallEditorTools
                     if (BoxToken.IsMatch(name))
                     {
                         // 木箱图例小节：image/model/object 三个标签字段
-                        var fields = ParseLegendFields(content, ref i, name);
+                        var fields = ParseLabeledFields(content, ref i, name, new[] { "image", "model", "object" });
 
                         string imagePath = "Assets/" + fields["image"].Replace('\\', '/');
                         var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(imagePath);
@@ -234,18 +259,52 @@ namespace RollABallEditorTools
                     }
                     else if (name == "tasks")
                     {
-                        // 任务池：若干行物品 id，直到下一个小节头/标签字段/文件尾
+                        // 任务池：每个任务一个小节「物品id:」+ time:/success:/fail:
+                        var seenTasks = new HashSet<string>();
                         i++;
                         while (i < content.Count)
                         {
-                            string id = content[i].Trim();
-                            if (id.Length == 0) { i++; continue; }
-                            if (SectionLine.IsMatch(id) || FieldLine.IsMatch(id)) break;
-                            taskIds.Add(id.ToLowerInvariant());
-                            i++;
+                            string idLine = content[i].Trim();
+                            if (idLine.Length == 0) { i++; continue; }
+
+                            Match taskHead = SectionLine.Match(idLine);
+                            if (!taskHead.Success)
+                            {
+                                // 顶层字段（task_num/goal/total_time）出现即归还主循环
+                                Match maybeTop = FieldLine.Match(idLine);
+                                if (maybeTop.Success && IsTopLevelField(maybeTop.Groups[1].Value.ToLowerInvariant())) break;
+                                throw new System.Exception(
+                                    $"tasks: 第 {i + 1} 行 '{idLine}' 应为任务小节头「物品id:」（如 corn:，" +
+                                    "下面跟 time:/success:/fail: 三行）");
+                            }
+
+                            string taskId = taskHead.Groups[1].Value.ToLowerInvariant();
+                            if (!itemIds.Contains(taskId))
+                                throw new System.Exception(
+                                    $"tasks: 里的 '{taskId}' 没有在 object.json 里登记" +
+                                    $"（现有：{string.Join(", ", itemIds)}）");
+                            if (!seenTasks.Add(taskId))
+                                throw new System.Exception($"tasks: 里任务 '{taskId}' 重复定义");
+
+                            var fields = ParseLabeledFields(content, ref i, $"tasks/{taskId}",
+                                new[] { "time", "success", "fail" });
+                            if (!float.TryParse(fields["time"], out float taskTime) || taskTime <= 0f)
+                                throw new System.Exception($"任务 {taskId} 的 time 必须是正数，读到 '{fields["time"]}'");
+                            if (!int.TryParse(fields["success"], out int succ) || succ < 0)
+                                throw new System.Exception($"任务 {taskId} 的 success 必须是非负整数，读到 '{fields["success"]}'");
+                            if (!int.TryParse(fields["fail"], out int failPenalty) || failPenalty < 0)
+                                throw new System.Exception($"任务 {taskId} 的 fail 必须是非负整数，读到 '{fields["fail"]}'");
+
+                            taskDefs.Add(new MapData.TaskDef
+                            {
+                                id = taskId,
+                                time = taskTime,
+                                success = succ,
+                                fail = failPenalty,
+                            });
                         }
-                        if (taskIds.Count == 0)
-                            throw new System.Exception("tasks: 小节为空（至少写一个物品 id）");
+                        if (taskDefs.Count == 0)
+                            throw new System.Exception("tasks: 小节为空（至少写一个任务小节，如 corn: + time/success/fail）");
                     }
                     else
                     {
@@ -255,24 +314,39 @@ namespace RollABallEditorTools
                 }
                 else
                 {
-                    // 顶层标签字段目前只有 task_num
+                    // 顶层标签字段：task_num / goal / total_time
                     Match field = FieldLine.Match(line);
-                    if (!field.Success || field.Groups[1].Value.ToLowerInvariant() != "task_num")
+                    string key = field.Success ? field.Groups[1].Value.ToLowerInvariant() : null;
+                    if (!field.Success || !IsTopLevelField(key))
                         throw new System.Exception(
-                            $"图例区第 {i + 1} 行 '{line}' 无法识别（应为「wN:」/「tasks:」小节头或「task_num:N」）");
-                    if (!int.TryParse(field.Groups[2].Value.Trim(), out taskNum) || taskNum <= 0)
-                        throw new System.Exception($"task_num 必须是正整数，读到 '{field.Groups[2].Value.Trim()}'");
+                            $"图例区第 {i + 1} 行 '{line}' 无法识别" +
+                            $"（应为「wN:」/「tasks:」小节头或「{string.Join(":", TopLevelFields)}」之一）");
+                    string value = field.Groups[2].Value.Trim();
+                    if (key == "task_num")
+                    {
+                        if (!int.TryParse(value, out taskNum) || taskNum <= 0)
+                            throw new System.Exception($"task_num 必须是正整数，读到 '{value}'");
+                    }
+                    else if (key == "goal")
+                    {
+                        if (!int.TryParse(value, out goal) || goal <= 0)
+                            throw new System.Exception($"goal 必须是正整数，读到 '{value}'");
+                    }
+                    else // total_time
+                    {
+                        if (!float.TryParse(value, out totalTime) || totalTime <= 0f)
+                            throw new System.Exception($"total_time 必须是正数，读到 '{value}'");
+                    }
                     i++;
                 }
             }
 
             if (taskNum < 0)
                 throw new System.Exception("缺少 task_num:（同时驻留的任务卡数，如 task_num:3）");
-
-            foreach (string id in taskIds)
-                if (!itemIds.Contains(id))
-                    throw new System.Exception(
-                        $"tasks: 里的 '{id}' 没有在 object.json 里登记（现有：{string.Join(", ", itemIds)}）");
+            if (goal < 0)
+                throw new System.Exception("缺少 goal:（本关胜利分数线，如 goal:100）");
+            if (totalTime < 0f)
+                throw new System.Exception("缺少 total_time:（本关总时长秒数，如 total_time:300）");
 
             foreach (string used in usedBoxTokens)
                 if (!types.Contains(used))
@@ -290,16 +364,19 @@ namespace RollABallEditorTools
             asset.blockItemMaterials = itemMaterials.ToArray();
             asset.blockObjectIds = objectIds.ToArray();
             asset.blockSideMaterial = sideMat;
-            asset.taskIds = taskIds.ToArray();
+            asset.tasks = taskDefs.ToArray();
             asset.taskNum = taskNum;
+            asset.goal = goal;
+            asset.totalTime = totalTime;
             return asset;
         }
 
         /// <summary>
-        /// 收集 wN 小节的标签字段（image/model/object），直到下一个小节头「xxx:」、
-        /// 顶层字段 task_num 或文件尾；停止时 i 落在小节头/字段行上（由主循环继续处理）。
+        /// 收集一个小节的标签字段（key 必须在 allowedKeys 内，且全部必填），直到下一个小节头「xxx:」、
+        /// 顶层字段（task_num/goal/total_time）或文件尾；停止时 i 落在停止行上（由调用方继续处理）。
         /// </summary>
-        private static Dictionary<string, string> ParseLegendFields(List<string> content, ref int i, string token)
+        private static Dictionary<string, string> ParseLabeledFields(
+            List<string> content, ref int i, string token, string[] allowedKeys)
         {
             var fields = new Dictionary<string, string>();
             i++;
@@ -310,14 +387,15 @@ namespace RollABallEditorTools
                 if (SectionLine.IsMatch(line)) break;
 
                 Match f = FieldLine.Match(line);
-                if (f.Success && f.Groups[1].Value.ToLowerInvariant() == "task_num") break;   // 顶层字段，归还主循环
+                if (f.Success && IsTopLevelField(f.Groups[1].Value.ToLowerInvariant())) break;   // 顶层字段，归还主循环
                 if (!f.Success)
                     throw new System.Exception(
-                        $"图例 {token} 第 {i + 1} 行 '{line}' 应为「key: value」格式（image/model/object）");
+                        $"图例 {token} 第 {i + 1} 行 '{line}' 应为「key: value」格式（{string.Join("/", allowedKeys)}）");
 
                 string key = f.Groups[1].Value.ToLowerInvariant();
-                if (key != "image" && key != "model" && key != "object")
-                    throw new System.Exception($"图例 {token} 的字段 '{key}' 无法识别（只支持 image/model/object）");
+                if (System.Array.IndexOf(allowedKeys, key) < 0)
+                    throw new System.Exception(
+                        $"图例 {token} 的字段 '{key}' 无法识别（只支持 {string.Join("/", allowedKeys)}）");
                 if (fields.ContainsKey(key))
                     throw new System.Exception($"图例 {token} 的字段 {key} 重复定义");
 
@@ -325,7 +403,7 @@ namespace RollABallEditorTools
                 i++;
             }
 
-            foreach (string required in new[] { "image", "model", "object" })
+            foreach (string required in allowedKeys)
                 if (!fields.ContainsKey(required))
                     throw new System.Exception($"图例 {token} 缺少 {required}: 字段");
             return fields;
@@ -342,11 +420,11 @@ namespace RollABallEditorTools
             EnsureFolder(GameInfoFolder);
             var items = ParseItemJson(File.ReadAllText(ObjectJsonPath));
 
-            var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryAssetPath);
+            var registry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(ItemRegistryAssetPath);
             if (registry == null)
             {
                 registry = ScriptableObject.CreateInstance<ItemRegistry>();
-                AssetDatabase.CreateAsset(registry, RegistryAssetPath);
+                AssetDatabase.CreateAsset(registry, ItemRegistryAssetPath);
             }
 
             var ids = new string[items.Count];
@@ -363,6 +441,40 @@ namespace RollABallEditorTools
             registry.icons = icons;
             EditorUtility.SetDirty(registry);
             return new HashSet<string>(ids);
+        }
+
+        /// <summary>把 Assets/Maps 下全部 MapData 按文件名排序烘焙成 LevelRegistry.asset（决定关卡顺序）。</summary>
+        private static void BakeLevelRegistry()
+        {
+            string[] guids = AssetDatabase.FindAssets("t:MapData", new[] { AssetFolder });
+            var maps = new List<MapData>();
+            var names = new List<string>();
+            foreach (string guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                var map = AssetDatabase.LoadAssetAtPath<MapData>(path);
+                if (map == null) continue;
+                maps.Add(map);
+                names.Add(Path.GetFileNameWithoutExtension(path));
+            }
+            if (maps.Count == 0)
+                throw new System.Exception($"Assets/Maps 下没有可用的地图资产");
+
+            // 按文件名排序：map1 < map2 < map3（Ordinal 保证数字顺序稳定）
+            var order = new int[maps.Count];
+            for (int i = 0; i < order.Length; i++) order[i] = i;
+            System.Array.Sort(order, (a, b) => string.CompareOrdinal(names[a], names[b]));
+            var levels = new MapData[maps.Count];
+            for (int i = 0; i < levels.Length; i++) levels[i] = maps[order[i]];
+
+            var registry = AssetDatabase.LoadAssetAtPath<LevelRegistry>(LevelRegistryAssetPath);
+            if (registry == null)
+            {
+                registry = ScriptableObject.CreateInstance<LevelRegistry>();
+                AssetDatabase.CreateAsset(registry, LevelRegistryAssetPath);
+            }
+            registry.levels = levels;
+            EditorUtility.SetDirty(registry);
         }
 
         /// <summary>
@@ -457,8 +569,10 @@ namespace RollABallEditorTools
                 existing.blockItemMaterials = parsed.blockItemMaterials;
                 existing.blockObjectIds = parsed.blockObjectIds;
                 existing.blockSideMaterial = parsed.blockSideMaterial;
-                existing.taskIds = parsed.taskIds;
+                existing.tasks = parsed.tasks;
                 existing.taskNum = parsed.taskNum;
+                existing.goal = parsed.goal;
+                existing.totalTime = parsed.totalTime;
                 EditorUtility.SetDirty(existing);
             }
             else

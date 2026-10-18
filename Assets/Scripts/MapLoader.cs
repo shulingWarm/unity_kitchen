@@ -21,6 +21,8 @@ namespace RollABall
         }
 
         public MapData map;
+        [Tooltip("关卡列表（菜单 3 烘焙）；主菜单选择的关卡会覆盖上面序列化的默认地图")]
+        public LevelRegistry levelRegistry;
         public Transform player;
         public Camera followCamera;
         public Material groundMaterial;
@@ -46,6 +48,14 @@ namespace RollABall
 
         private void Awake()
         {
+            // 关卡机制：主菜单选中的关卡覆盖场景里序列化的默认地图（直接运行游戏场景 = 第 0 关）
+            if (levelRegistry != null && levelRegistry.levels != null &&
+                LevelSelection.Index >= 0 && LevelSelection.Index < levelRegistry.levels.Length &&
+                levelRegistry.levels[LevelSelection.Index] != null)
+            {
+                map = levelRegistry.levels[LevelSelection.Index];
+            }
+
             if (map == null || player == null)
             {
                 Debug.LogError("[MapLoader] 未配置 map 或 player 引用，跳过关卡生成");
@@ -59,9 +69,17 @@ namespace RollABall
             BuildObstacles();
             PlacePlayer();
             FrameCamera();
+            SetupGameTimer();
 
             Debug.Log($"[MapLoader] 地图加载完成：{map.rows}x{map.cols}，" +
-                      $"出生点 (r{map.spawnCell.x}, c{map.spawnCell.y})");
+                      $"出生点 (r{map.spawnCell.x}, c{map.spawnCell.y})，目标 {map.goal} 分/{map.totalTime:0} 秒");
+        }
+
+        /// <summary>把地图的 total_time 注入右下角全局倒计时（存在时）。</summary>
+        private void SetupGameTimer()
+        {
+            var timer = FindFirstObjectByType<CountdownTimerUI>();
+            if (timer != null) timer.Setup(map.totalTime);
         }
 
         private void ParseCells()

@@ -46,7 +46,15 @@ MonoBehaviour:
   - corn
   blockSideMaterial: {fileID: 2100000, guid: 04391d8163760f848af2aa73634293fd, type: 2}
   spawnCell: {x: 2, y: 4}
-  taskIds:
-  - corn
-  - tomato
+  tasks:
+  - id: corn
+    time: 20
+    success: 10
+    fail: 5
+  - id: tomato
+    time: 20
+    success: 10
+    fail: 5
   taskNum: 3
+  goal: 100
+  totalTime: 300

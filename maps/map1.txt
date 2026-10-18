@@ -21,7 +21,16 @@ model:  cube_images/corn.fbx
 object: corn
 
 tasks:
-corn
-tomato
+corn:
+time:20
+success:10
+fail:5
+
+tomato:
+time:20
+success:10
+fail:5
 
 task_num:3
+goal:100
+total_time:300

@@ -6,12 +6,16 @@ namespace RollABall
     /// <summary>
     /// 倒计时条（右下角，胡闹厨房风格）：深蓝面板 + 白色大号剩余时间 + 红色递减进度条 + 沙漏图标。
     /// UI 全部在运行时自建，场景中只需一个挂了本组件的空物体。
-    /// 时间到后停在 00:00 并变红（结算逻辑可在 OnTimeUp 里扩展）。
+    /// 总时长默认由地图 total_time 注入（MapLoader.Awake 调 Setup）；
+    /// 时间到后停在 00:00 并变红，通过 TimeUp 事件通知 GameFlowUI 判负。
     /// </summary>
     public class CountdownTimerUI : MonoBehaviour
     {
-        [Tooltip("倒计时总秒数")]
+        [Tooltip("倒计时总秒数（会被地图 total_time 覆盖）")]
         public float countdownSeconds = 120f;
+
+        /// <summary>倒计时结束事件（只触发一次）。</summary>
+        public event System.Action TimeUp;
 
         private Text _timeText;
         private Image _barFill;
@@ -44,10 +48,20 @@ namespace RollABall
             }
         }
 
-        /// <summary>时间到。后续可在这里接失败/结算逻辑。</summary>
+        /// <summary>由 MapLoader 在 Awake 注入地图总时长（覆盖场景序列化的默认值）。</summary>
+        public void Setup(float seconds)
+        {
+            countdownSeconds = seconds;
+            _remaining = seconds;
+            _finished = seconds <= 0f;
+            if (_timeText != null) Refresh();
+        }
+
+        /// <summary>时间到。通知订阅者（GameFlowUI 判负）。</summary>
         protected virtual void OnTimeUp()
         {
             Debug.Log("[CountdownTimerUI] 时间到！");
+            TimeUp?.Invoke();
         }
 
         private void Refresh()

@@ -10,7 +10,8 @@ namespace RollABall
     ///   0 = 地面   1 = 墙   p = 出生点（导入时归一化为 0，单存 spawnCell）
     ///   wN = 木箱（图例小节定义顶图/取出模型/物品 id，数组按下标对应，碰撞等同墙）
     ///   s/s1-s4 = 出餐口（障碍物，箭头方向随编号，也是交付任务的地点）
-    ///   图例区另有 tasks:（任务池物品 id）与 task_num:（同时驻留任务卡数）
+    ///   图例区另有 tasks:（逐任务小节：id + time/success/fail）、
+    ///   task_num:（驻留卡数）、goal:（胜利分数）、total_time:（总时长秒）
     ///   （可吃小球 x 已随胜利条件移除）
     /// </summary>
     [CreateAssetMenu(fileName = "MapData", menuName = "Roll-a-Ball/Map Data")]
@@ -33,8 +34,22 @@ namespace RollABall
         public Vector2Int spawnCell;         // 玩家出生格 (row, col)
 
         [Header("任务")]
-        public string[] taskIds;             // 本地图任务池（物品 id）
+        public TaskDef[] tasks;              // 本地图任务池（每个任务自带限时与奖惩分）
         public int taskNum = 3;              // 左上角同时驻留的任务卡数
+
+        [Header("关卡目标")]
+        public int goal = 100;               // 达到该分数立即胜利
+        public float totalTime = 300f;       // 本关总时长（秒），耗尽未达标判负
+
+        /// <summary>tasks: 小节的单个任务定义（物品 id + 订单等待时间 + 奖惩分）。</summary>
+        [System.Serializable]
+        public class TaskDef
+        {
+            public string id;       // 物品 id（object.json）
+            public float time;      // 订单等待时间（秒）
+            public int success;     // 完成奖励分
+            public int fail;        // 超时惩罚分（存正值，运行时扣减）
+        }
 
         public bool InRange(int r, int c) => r >= 0 && r < rows && c >= 0 && c < cols;
 

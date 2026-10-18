@@ -6,17 +6,15 @@ namespace RollABall
 {
     /// <summary>
     /// 左上角任务卡（胡闹厨房风格）：开局按地图 task_num 从任务池随机抽卡，
-    /// 每张卡只要求 1 个物品；完成或超时作废后立刻随机补一张新卡，始终保持驻留数。
+    /// 每张卡只要求 1 个物品，限时/奖惩分来自该任务的地图定义（time:/success:/fail:）；
+    /// 完成或超时作废后立刻随机补一张新卡，始终保持驻留数。
     /// 交付由 PlayerController 在出餐口触发 TryServe：命中同物品的任务卡即完成（加分）；
     /// 未命中时物品由交付方直接消耗（惩罚乱交，不计分），这里只负责回答"命中与否"。
     /// 物品图标查 ItemRegistry（object.json 导入时烘焙）；UI 全部运行时自建。
     /// </summary>
     public class TaskCardsUI : MonoBehaviour
     {
-        [Tooltip("每张任务卡的限时（秒），超时作废并补新卡")]
-        public float orderTimeSeconds = 30f;
-
-        [Tooltip("地图加载器（任务池 taskIds / 驻留数 taskNum 来源）")]
+        [Tooltip("地图加载器（任务池 tasks / 驻留数 taskNum 来源）")]
         public MapLoader mapLoader;
 
         [Tooltip("物品注册表（object.json 烘焙资产）")]
@@ -38,7 +36,7 @@ namespace RollABall
 
         private class Task
         {
-            public string objectId;
+            public MapData.TaskDef def; // 本卡的任务定义（id/限时/奖惩分）
             public GameObject root;
             public Image barFill;
             public float timeLeft;
@@ -59,9 +57,9 @@ namespace RollABall
                 return;
             }
             var map = mapLoader.map;
-            if (map.taskIds == null || map.taskIds.Length == 0 || map.taskNum <= 0)
+            if (map.tasks == null || map.tasks.Length == 0 || map.taskNum <= 0)
             {
-                Debug.Log("[TaskCardsUI] 本地图没有任务（taskIds 为空或 task_num <= 0），不显示任务卡");
+                Debug.Log("[TaskCardsUI] 本地图没有任务（tasks 为空或 task_num <= 0），不显示任务卡");
                 return;
             }
 
@@ -96,7 +94,7 @@ namespace RollABall
                 {
                     RemoveTask(t);      // 超时作废
                     DrawNewTask();      // 立刻补一张
-                    if (_scoreUI != null) _scoreUI.AddTimeout();   // 超时扣分
+                    if (_scoreUI != null) _scoreUI.Add(-t.def.fail);   // 超时扣分
                     anyExpired = true;
                 }
             }
@@ -113,12 +111,12 @@ namespace RollABall
         /// <summary>交付尝试：命中第一张要求该物品的任务卡 → 完成并补新卡；返回是否命中。</summary>
         public bool TryServe(string objectId)
         {
-            var task = _tasks.Find(t => t.objectId == objectId);
+            var task = _tasks.Find(t => t.def.id == objectId);
             if (task == null) return false;
             RemoveTask(task);
             DrawNewTask();
             ReflowSlots();
-            if (_scoreUI != null) _scoreUI.AddDelivery();   // 成功送出一餐，加分
+            if (_scoreUI != null) _scoreUI.Add(task.def.success);   // 完成任务，加该任务的奖励分
             return true;
         }
 
@@ -126,10 +124,10 @@ namespace RollABall
 
         private void DrawNewTask()
         {
-            string[] pool = mapLoader.map.taskIds;
-            string objectId = pool[Random.Range(0, pool.Length)];
+            MapData.TaskDef[] pool = mapLoader.map.tasks;
+            var def = pool[Random.Range(0, pool.Length)];
 
-            var task = new Task { objectId = objectId, timeLeft = orderTimeSeconds };
+            var task = new Task { def = def, timeLeft = def.time };
             task.root = BuildCard(task, _tasks.Count);
             _tasks.Add(task);
             UpdateBar(task);
@@ -149,7 +147,7 @@ namespace RollABall
 
         private void UpdateBar(Task task)
         {
-            float frac = orderTimeSeconds > 0f ? Mathf.Clamp01(task.timeLeft / orderTimeSeconds) : 0f;
+            float frac = task.def.time > 0f ? Mathf.Clamp01(task.timeLeft / task.def.time) : 0f;
             task.barFill.rectTransform.anchorMax = new Vector2(frac, 1f);
             task.barFill.color = task.timeLeft <= _urgentBelow ? BarUrgentColor : BarFillColor;
         }
@@ -161,7 +159,7 @@ namespace RollABall
             Color tapeColor = TapeColors[cardIndex % TapeColors.Length];
 
             // 先放在屏幕外，由 ReflowSlots 给出目标槽位后平滑滑入
-            var card = new GameObject($"TaskCard_{task.objectId}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            var card = new GameObject($"TaskCard_{task.def.id}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
             card.transform.SetParent(_canvas.transform, false);
             var rt = (RectTransform)card.transform;
             SetRect(rt, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
@@ -185,7 +183,7 @@ namespace RollABall
                 new Vector2(0.12f, 0.30f), new Vector2(0.88f, 0.86f), new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero);
             var icon = iconGO.GetComponent<Image>();
-            icon.sprite = MakeIcon(registry.GetIcon(task.objectId), tapeColor);
+            icon.sprite = MakeIcon(registry.GetIcon(task.def.id), tapeColor);
             icon.preserveAspect = true;
 
             // 限时进度条

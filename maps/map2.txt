@@ -1,0 +1,38 @@
+12 13
+1	1	1	1	1	1	1	1	1	1	1	1	1
+1	1	1	1	1	1	1	1	1	1	0	0	1
+1	1	1	1	1	1	0	0	0	0	0	0	1
+1	1	1	1	1	0	0	0	0	0	1	0	1
+1	1	1	1	0	0	0	0	0	1	1	0	1
+1	1	1	1	0	0	p	0	1	0	0	0	1
+1	s3	0	0	0	0	0	1	1	0	0	0	1
+1	0	0	0	0	0	0	1	1	0	0	0	1
+1	1	1	0	0	0	0	1	1	0	0	0	1
+1	1	1	1	0	0	1	1	1	0	0	1	1
+1	1	1	1	0	w2	1	1	1	w1	0	1	1
+1	1	1	1	1	1	1	1	1	1	1	1	1
+
+w1:
+image:  cube_images/tomato.png
+model:  cube_images/tomato.fbx
+object: tomato
+
+w2:
+image:  cube_images/corn.png
+model:  cube_images/corn.fbx
+object: corn
+
+tasks:
+corn:
+time:20
+success:10
+fail:5
+
+tomato:
+time:50
+success:40
+fail:5
+
+task_num:2
+goal:100
+total_time:400

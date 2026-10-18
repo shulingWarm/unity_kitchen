@@ -106,6 +106,7 @@ namespace RollABallEditorTools
             var levelGO = new GameObject("Level");
             var loader = levelGO.AddComponent<MapLoader>();
             loader.map = mapAsset;
+            loader.levelRegistry = MapImporter.GetBakedLevelRegistry();
             loader.player = player.transform;
             loader.followCamera = camGO.GetComponent<Camera>();
             loader.groundMaterial = matGround;
@@ -124,7 +125,11 @@ namespace RollABallEditorTools
             // ---- 保存场景并设为唯一构建场景 ----
             Directory.CreateDirectory("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+            // 构建列表保留主菜单场景（菜单 6 生成）在首位；尚不存在时只有游戏场景
+            var menuScene = "Assets/Scenes/MainMenuScene.unity";
+            EditorBuildSettings.scenes = System.IO.File.Exists(menuScene)
+                ? new[] { new EditorBuildSettingsScene(menuScene, true), new EditorBuildSettingsScene(ScenePath, true) }
+                : new[] { new EditorBuildSettingsScene(ScenePath, true) };
 
             EditorUtility.DisplayDialog("Roll-a-Ball",
                 "场景已生成并保存到 Assets/Scenes/DemoScene.unity\n" +
@@ -259,6 +264,9 @@ namespace RollABallEditorTools
 
             // 积分面板（左下角，UI 由组件运行时自建）
             new GameObject("ScoreUI", typeof(ScoreUI));
+
+            // 关卡流程（胜利/失败判定与结算面板）
+            TaskCardsScenePatcher.CreateGameFlow(loader);
         }
 
         private static GameObject CreateText(Transform parent, string name, string content, Font font, int size, Color color)

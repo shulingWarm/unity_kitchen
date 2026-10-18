@@ -4,18 +4,15 @@ using UnityEngine.UI;
 namespace RollABall
 {
     /// <summary>
-    /// 左下角积分面板：显示当前积分。计分规则：成功送出一餐 +deliveryScore，
-    /// 任务卡超时作废 -timeoutPenalty，允许扣到负分。白交（未命中任务）不计分。
-    /// 分数状态由本组件持有，TaskCardsUI 在交付命中/超时作废时调用 AddDelivery / AddTimeout；
+    /// 左下角积分面板：显示当前积分。分值由地图的任务定义决定（完成 +success，超时 -fail），
+    /// TaskCardsUI 调 Add(delta) 记账，允许扣到负分；白交（未命中任务）不计分。
+    /// 当前分数通过 Score 属性暴露（GameFlowUI 做胜利判定用）；
     /// 每局重新开始（场景重载）分数自动归零。UI 运行时自建。
     /// </summary>
     public class ScoreUI : MonoBehaviour
     {
-        [Tooltip("每成功送出一餐的得分")]
-        public int deliveryScore = 10;
-
-        [Tooltip("每有一餐超时的扣分")]
-        public int timeoutPenalty = 5;
+        /// <summary>当前积分（可为负）。</summary>
+        public int Score => _score;
 
         private Text _label;
         private int _score;
@@ -35,17 +32,10 @@ namespace RollABall
             Refresh();
         }
 
-        /// <summary>成功送出一餐：加分。</summary>
-        public void AddDelivery()
+        /// <summary>记一笔分数变化（正=完成任务的奖励，负=超时惩罚）。</summary>
+        public void Add(int delta)
         {
-            _score += deliveryScore;
-            Refresh();
-        }
-
-        /// <summary>一张任务卡超时作废：扣分。</summary>
-        public void AddTimeout()
-        {
-            _score -= timeoutPenalty;
+            _score += delta;
             Refresh();
         }
 
