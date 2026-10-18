@@ -387,7 +387,12 @@ namespace RollABall
             followCamera.transform.rotation = Quaternion.Euler(52f, 0f, 0f);
 
             var follow = followCamera.GetComponent<CameraFollow>();
-            if (follow != null) follow.offset = offset;
+            if (follow != null)
+            {
+                follow.offset = offset;
+                follow.baseOffset = offset;   // 缩放基准：缩放是该偏移的相对倍率
+                follow.zoom = 1f;             // 每关开始重置缩放
+            }
         }
     }
 }
