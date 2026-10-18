@@ -14,9 +14,13 @@ namespace RollABall
     {
         public float moveSpeed = 6f;
         public Camera followCamera;       // 用于把摇杆方向换算成世界方向
-        public Animator animator;         // 场景生成器注入（挂在模型实例上）
+        public Animator animator;         // 场景生成器注入（挂在模型实例上；猫咪模型时为 null）
         public Transform modelPivot;      // 模型父节点：只负责朝向，物理根不旋转
+        public Transform mouthAnchor;     // 嘴部锚点：无人形骨骼的模型（如猫咪）捧物挂这里
         public float turnSpeed = 12f;     // 转身平滑度
+
+        /// <summary>是否叼着/抱着物品（猫咪外观动画读取此状态）。</summary>
+        public bool IsCarrying => heldItem != null;
 
         [Header("抓取")]
         public MapLoader mapLoader;       // 木箱列表来源
@@ -82,16 +86,17 @@ namespace RollABall
 
         // ---------------- 抓取 ----------------
 
-        /// <summary>抓取按钮回调。空手且附近有木箱时，取出绿球捧在双手里。</summary>
+        /// <summary>抓取按钮回调。空手且附近有木箱时，取出绿球：人形捧在双手里，猫咪叼在嘴里。</summary>
         public void TryGrab()
         {
             if (heldItem != null) return;                       // 手上已有物品：第一版不做任何处理
-            if (mapLoader == null || animator == null) return;
+            if (mapLoader == null) return;
 
             Transform box = FindNearestBox();
             if (box == null) return;                            // 附近没有木箱：不响应
 
-            SpawnHeldItem();
+            if (mouthAnchor != null) SpawnHeldItemOnAnchor(mouthAnchor);
+            else if (animator != null) SpawnHeldItemOnChest();
         }
 
         private Transform FindNearestBox()
@@ -109,12 +114,30 @@ namespace RollABall
             return nearest;
         }
 
-        private void SpawnHeldItem()
+        // 猫咪等无骨骼模型：绿球直接挂嘴部锚点
+        private void SpawnHeldItemOnAnchor(Transform anchor)
+        {
+            BuildHeldItem();
+            heldItem.transform.SetParent(anchor, false);
+            heldItem.transform.localPosition = Vector3.zero;
+        }
+
+        // 人形模型：绿球挂在胸部骨骼前（世界位置保持，随骨骼摆动）
+        private void SpawnHeldItemOnChest()
         {
             Transform chest = animator.GetBoneTransform(HumanBodyBones.Chest);
             if (chest == null) chest = animator.GetBoneTransform(HumanBodyBones.Spine);
             if (chest == null) return;
 
+            BuildHeldItem();
+            heldItem.transform.position = chest.position
+                                         + modelPivot.forward * 0.35f
+                                         + Vector3.up * 0.1f;
+            heldItem.transform.SetParent(chest, true);           // 跟随胸部骨骼
+        }
+
+        private void BuildHeldItem()
+        {
             if (itemMaterial == null)
                 itemMaterial = new Material(Shader.Find("Standard")) { color = new Color(0.2f, 0.75f, 0.3f) };
 
@@ -123,10 +146,6 @@ namespace RollABall
             Object.Destroy(heldItem.GetComponent<Collider>());   // 纯视觉挂件，不参与物理
             heldItem.GetComponent<Renderer>().sharedMaterial = itemMaterial;
             heldItem.transform.localScale = Vector3.one * itemRadius * 2f;
-            heldItem.transform.position = chest.position
-                                         + modelPivot.forward * 0.35f
-                                         + Vector3.up * 0.1f;
-            heldItem.transform.SetParent(chest, true);           // 跟随胸部骨骼
         }
 
         /// <summary>由模型实例上的 PlayerHandIK 在 OnAnimatorIK 中调用（IK 必须与 Animator 同节点）。</summary>

@@ -32,6 +32,8 @@ namespace RollABallEditorTools
 
             // ---- 材质 ----
             var matGround = GetOrCreateMaterial("Assets/Materials/M_Ground.mat", new Color(0.55f, 0.75f, 0.55f));
+            // 地板厨房贴图（贴图平铺由 MapLoader 按格子数设置）
+            FloorTexturePatcher.ApplyFloorTextureToMaterial();
             var matWall   = GetOrCreateMaterial("Assets/Materials/M_Wall.mat", new Color(0.65f, 0.65f, 0.65f));
             var matServingSide = GetOrCreateMaterial("Assets/Materials/M_ServingSide.mat", new Color(0.30f, 0.32f, 0.35f));
             var matServingTop  = GetOrCreateServingTopMaterial("Assets/Materials/M_ServingTop.mat");
@@ -89,6 +91,9 @@ namespace RollABallEditorTools
                 botAnimator.runtimeAnimatorController = animatorCtrl;
                 botAnimator.applyRootMotion = false;   // Mixamo 动画带位移曲线，位置必须由物理根驱动
             }
+
+            // 用猫咪模型替换人形形象（保留物理根、朝向节点与抓取系统）
+            CatModelPatcher.ReplacePlayerModelWithCat();
 
             // ---- 关卡数据（导入 maps/*.txt → Assets/Maps/*.asset，运行时由 MapLoader 生成）----
             var mapAsset = MapImporter.ImportAllAndGetDefault();
