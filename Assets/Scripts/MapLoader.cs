@@ -77,7 +77,11 @@ namespace RollABall
             ground.transform.SetParent(transform, false);
             // Unity 原生 Plane 是 10x10，按格子尺寸换算缩放
             ground.transform.localScale = new Vector3(map.cols * map.cellSize / 10f, 1f, map.rows * map.cellSize / 10f);
-            ground.GetComponent<Renderer>().sharedMaterial = groundMaterial;
+            var renderer = ground.GetComponent<Renderer>();
+            renderer.sharedMaterial = groundMaterial;
+            // 地板贴图整场一张大图（UV 0..1 铺满整个 Plane，不做平铺）
+            if (groundMaterial != null && groundMaterial.mainTexture != null)
+                renderer.material.mainTextureScale = Vector2.one;
         }
 
         private void BuildObstacles()
