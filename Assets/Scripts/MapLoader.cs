@@ -5,12 +5,20 @@ namespace RollABall
 {
     /// <summary>
     /// 游戏启动（Awake）时按 MapData 实例化关卡：
-    /// 整块地面 + 逐格墙体 + 木箱（wN：木色立方体 + 顶面图片）+ 可吃小球，
+    /// 整块地面 + 逐格墙体 + 木箱（wN：木色立方体 + 顶面图片 + 取出物品模型），
     /// 并把玩家放到出生点、让相机取景适配地图大小。
     /// 场景里只挂这一个组件，不再硬编码任何关卡内容。
     /// </summary>
     public class MapLoader : MonoBehaviour
     {
+        /// <summary>木箱槽位：box = 箱体；itemModel = 从箱中取出的食材模型；fallbackMaterial = 模型缺贴图时的兜底材质。</summary>
+        public struct BoxSlot
+        {
+            public Transform box;
+            public GameObject itemModel;
+            public Material fallbackMaterial;
+        }
+
         public MapData map;
         public Transform player;
         public Camera followCamera;
@@ -24,10 +32,12 @@ namespace RollABall
         public float boxSize = 1.6f;    // 木箱边长；格子 2.0 留 0.4 缝，球直径 1.0 钻不进，碰撞用箱子自身即可
 
         /// 运行时生成的所有木箱（抓取功能的距离查询用）
-        public List<Transform> Boxes { get; } = new List<Transform>();
+        public List<BoxSlot> Boxes { get; } = new List<BoxSlot>();
 
         private string[,] cells;         // 预拆分的 token 网格
         private Dictionary<string, Material> boxTopMaterials;
+        private Dictionary<string, GameObject> boxItemModels;
+        private Dictionary<string, Material> boxItemFallbackMaterials;
 
         private void Awake()
         {
@@ -63,11 +73,20 @@ namespace RollABall
         private void BuildBoxMaterialLookup()
         {
             boxTopMaterials = new Dictionary<string, Material>();
-            if (map.blockTypes == null || map.blockMaterials == null) return;
+            boxItemModels = new Dictionary<string, GameObject>();
+            boxItemFallbackMaterials = new Dictionary<string, Material>();
+            if (map.blockTypes == null) return;
 
-            int n = Mathf.Min(map.blockTypes.Length, map.blockMaterials.Length);
-            for (int i = 0; i < n; i++)
-                boxTopMaterials[map.blockTypes[i]] = map.blockMaterials[i];
+            for (int i = 0; i < map.blockTypes.Length; i++)
+            {
+                string token = map.blockTypes[i];
+                if (map.blockMaterials != null && i < map.blockMaterials.Length)
+                    boxTopMaterials[token] = map.blockMaterials[i];
+                if (map.blockModels != null && i < map.blockModels.Length)
+                    boxItemModels[token] = map.blockModels[i];
+                if (map.blockItemMaterials != null && i < map.blockItemMaterials.Length)
+                    boxItemFallbackMaterials[token] = map.blockItemMaterials[i];
+            }
         }
 
         private void BuildGround()
@@ -125,7 +144,14 @@ namespace RollABall
             box.transform.position = map.CellToWorld(r, c) + Vector3.up * (boxSize * 0.5f);
             box.GetComponent<Renderer>().sharedMaterial =
                 map.blockSideMaterial != null ? map.blockSideMaterial : wallMaterial;
-            Boxes.Add(box.transform);
+
+            // 取出物品模型（图例第二字段）；缺失时记 null，抓取端回退绿色小球
+            GameObject itemModel;
+            if (!boxItemModels.TryGetValue(token, out itemModel) || itemModel == null)
+                Debug.LogWarning($"[MapLoader] {token} 缺少取出物品模型，抓取时将回退绿色小球");
+            Material fallbackMat;
+            boxItemFallbackMaterials.TryGetValue(token, out fallbackMat);
+            Boxes.Add(new BoxSlot { box = box.transform, itemModel = itemModel, fallbackMaterial = fallbackMat });
 
             // 顶面图片：Quad 盖在顶面（抬高 0.002 防 Z-fighting），Quad 的碰撞体去掉
             Material topMat;

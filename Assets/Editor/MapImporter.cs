@@ -12,14 +12,16 @@ namespace RollABallEditorTools
     /// 把工程根 maps/*.txt 解析校验后转成 Assets/Maps/*.asset（MapData）。
     /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/p/wN/s1-s4；
     /// 兼容旧格式：整行无分隔符且长度等于列数时按单字符解析。
-    /// 图例区：网格后每行 "wN: 图片路径"（相对 Assets），导入时烘焙顶面材质。
+    /// 图例区：每个木箱类型三行——「wN:」单独一行，随后两个非空行依次是
+    /// 图片路径（烘焙顶面材质）、fbx 模型路径（取出物品模型），均相对 Assets；
+    /// 模型缺贴图时的兜底材质优先用其同目录的 colormap.png / 同名 png，否则用图例图片。
     /// 资产已存在时覆盖字段（保留 GUID，场景引用不失效）。
     /// </summary>
     public static class MapImporter
     {
         private const string AssetFolder = "Assets/Maps";
         private static readonly Regex BoxToken = new Regex(@"^w\d+$");
-        private static readonly Regex LegendLine = new Regex(@"^\s*(\S+)\s*:\s*(\S+)\s*$");
+        private static readonly Regex LegendHeader = new Regex(@"^\s*(\S+)\s*:\s*$");
 
         [MenuItem("Tools/Roll-a-Ball/3 - 导入 maps/ 下的地图文件")]
         public static void ImportMenu()
@@ -158,40 +160,72 @@ namespace RollABallEditorTools
             }
 
             // ---------------- 图例区 ----------------
+            // 新格式：每个类型三行——「wN:」单独一行，随后两个非空行依次是 图片路径、模型路径
             var types = new List<string>();
             var images = new List<string>();
             var materials = new List<Material>();
+            var models = new List<GameObject>();
+            var itemMaterials = new List<Material>();
 
             // 所有木箱共用的侧面材质（纯色木棕）
             Material sideMat = GetOrCreatePlainMaterial($"{AssetFolder}/BoxSide.mat", new Color(0.55f, 0.36f, 0.20f));
 
-            for (int i = rows + 1; i < content.Count; i++)
+            for (int i = rows + 1; i < content.Count; )
             {
                 string line = content[i];
-                if (line.Length == 0) continue;
+                if (line.Length == 0) { i++; continue; }
 
-                Match m = LegendLine.Match(line);
+                Match m = LegendHeader.Match(line);
                 if (!m.Success)
-                    throw new System.Exception($"图例区第 {i + 1} 行 '{line}' 不是「token: 图片路径」格式");
+                    throw new System.Exception(
+                        $"图例区第 {i + 1} 行 '{line}' 应为「wN:」（单独一行，后面跟图片路径、模型路径两行）。" +
+                        "旧的单行「wN: 图片路径」格式已不再支持");
 
                 string token = m.Groups[1].Value.ToLowerInvariant();
                 if (!BoxToken.IsMatch(token))
                     throw new System.Exception($"图例 token '{token}' 非法（应为 wN 形式，如 w1）");
 
-                // 图片路径相对 Assets 解析
-                string texPath = "Assets/" + m.Groups[2].Value.Replace('\\', '/');
+                // 收集本图例的两个字段（容忍空行）：字段 1 = 图片，字段 2 = 模型
+                var fields = new string[2];
+                int found = 0;
+                i++;
+                while (i < content.Count && found < 2)
+                {
+                    string field = content[i].Trim();
+                    if (field.Length == 0) { i++; continue; }
+                    if (LegendHeader.IsMatch(field))
+                        throw new System.Exception(
+                            $"图例 {token} 字段不全：第 {i + 1} 行出现了下一个「wN:」，缺少图片/模型路径");
+                    fields[found++] = field;
+                    i++;
+                }
+                if (found < 2)
+                    throw new System.Exception($"图例 {token} 字段不全：需要「wN:」+ 图片路径 + 模型路径 共 3 行");
+
+                // 字段 1：图片 → 顶面材质（相对 Assets 解析）
+                string texPath = "Assets/" + fields[0].Replace('\\', '/');
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
                 if (tex == null)
                     throw new System.Exception($"图例 {token} 的图片不存在：{texPath}");
 
+                // 字段 2：模型 → 取出物品的 prefab
+                string modelPath = "Assets/" + fields[1].Replace('\\', '/');
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+                if (model == null)
+                    throw new System.Exception(
+                        $"图例 {token} 的模型不存在或尚未被 Unity 导入：{modelPath}（fbx 需放在 Assets 下）");
+
                 types.Add(token);
-                images.Add(m.Groups[2].Value);
+                images.Add(fields[0]);
                 materials.Add(GetOrCreateTopMaterial($"{AssetFolder}/BoxTop_{token}.mat", tex));
+                models.Add(model);
+                itemMaterials.Add(GetOrCreateTopMaterial(
+                    $"{AssetFolder}/BoxItem_{token}.mat", FindItemTexture(modelPath, texPath)));
             }
 
             foreach (string used in usedBoxTokens)
                 if (!types.Contains(used))
-                    throw new System.Exception($"网格使用了 {used}，但图例区没有它的定义（wN: 图片路径）");
+                    throw new System.Exception($"网格使用了 {used}，但图例区没有它的定义（wN: + 图片路径 + 模型路径）");
 
             var asset = ScriptableObject.CreateInstance<MapData>();
             asset.rows = rows;
@@ -201,11 +235,34 @@ namespace RollABallEditorTools
             asset.blockTypes = types.ToArray();
             asset.blockImages = images.ToArray();
             asset.blockMaterials = materials.ToArray();
+            asset.blockModels = models.ToArray();
+            asset.blockItemMaterials = itemMaterials.ToArray();
             asset.blockSideMaterial = sideMat;
             return asset;
         }
 
         // ---------------- 材质烘焙 ----------------
+
+        /// <summary>
+        /// 食材模型缺贴图时的兜底贴图：优先模型同目录的 colormap.png（低模资源包的惯用命名），
+        /// 其次与模型同名的 png，最后才回退图例图片（箱顶贴图）。
+        /// </summary>
+        private static Texture2D FindItemTexture(string modelPath, string legendTexPath)
+        {
+            string modelDir = Path.GetDirectoryName(modelPath)!.Replace('\\', '/');
+            string modelBase = Path.GetFileNameWithoutExtension(modelPath);
+            var candidates = new[]
+            {
+                $"{modelDir}/colormap.png",
+                $"{modelDir}/{modelBase}.png",
+            };
+            foreach (string path in candidates)
+            {
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (tex != null) return tex;
+            }
+            return AssetDatabase.LoadAssetAtPath<Texture2D>(legendTexPath);
+        }
 
         private static Material GetOrCreateTopMaterial(string matPath, Texture2D topTexture)
         {
@@ -245,6 +302,8 @@ namespace RollABallEditorTools
                 existing.blockTypes = parsed.blockTypes;
                 existing.blockImages = parsed.blockImages;
                 existing.blockMaterials = parsed.blockMaterials;
+                existing.blockModels = parsed.blockModels;
+                existing.blockItemMaterials = parsed.blockItemMaterials;
                 existing.blockSideMaterial = parsed.blockSideMaterial;
                 EditorUtility.SetDirty(existing);
             }

@@ -35,5 +35,11 @@ MonoBehaviour:
   blockMaterials:
   - {fileID: 2100000, guid: 0f5c28c8de8ea1840b692aa74ac7ea37, type: 2}
   - {fileID: 2100000, guid: 193c56bd8089aa64c84eba801c6da695, type: 2}
+  blockModels:
+  - {fileID: 919132149155446097, guid: 03566bd6a106b3f4494a5182aade21c7, type: 3}
+  - {fileID: 919132149155446097, guid: 309f3f398feea4644aee01dff3dc578e, type: 3}
+  blockItemMaterials:
+  - {fileID: 2100000, guid: 873f44b3feca7ef42a667cd2a67da2c5, type: 2}
+  - {fileID: 2100000, guid: ffec0d1893655c14a982169526cef787, type: 2}
   blockSideMaterial: {fileID: 2100000, guid: 04391d8163760f848af2aa73634293fd, type: 2}
   spawnCell: {x: 2, y: 4}

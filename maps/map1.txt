@@ -10,5 +10,9 @@
 0	0	0	0	0	0	0	0	0	0
 0	0	0	0	0	0	0	0	0	0
 
-w1: cube_images/tomato.png
-w2: cube_images/corn.png
+w1: 
+cube_images/tomato.png
+cube_images/tomato.fbx
+w2: 
+cube_images/corn.png
+cube_images/corn.fbx

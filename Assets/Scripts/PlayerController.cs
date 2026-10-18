@@ -6,7 +6,7 @@ namespace RollABall
     /// <summary>
     /// 玩家（人形角色）：读取虚拟摇杆输入做相机相对移动，
     /// 模型朝移动方向转身，Animator 按移动状态切换 Idle/Walk。
-    /// 抓取：点击抓取按钮时从最近的木箱拿出绿色小球，双手 IK 捧在身前。
+    /// 抓取：点击抓取按钮时从最近的木箱拿出对应食材模型（图例第二字段），双手 IK 捧在身前。
     /// 胜利条件：暂无（收集玩法已移除）。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
@@ -25,7 +25,7 @@ namespace RollABall
         [Header("抓取")]
         public MapLoader mapLoader;       // 木箱列表来源
         public float grabRange = 3f;      // 距离箱子多远以内可以拿
-        public float itemRadius = 0.18f;  // 手持绿球半径
+        public float itemRadius = 0.18f;  // 手持物品目标半径：模型最大边长归一化到 itemRadius*2，IK 抓握距离也按它算
 
         private Rigidbody rb;
         private GameObject heldItem;      // 手上的物品（挂在胸部骨骼上，null = 空手）
@@ -86,66 +86,137 @@ namespace RollABall
 
         // ---------------- 抓取 ----------------
 
-        /// <summary>抓取按钮回调。空手且附近有木箱时，取出绿球：人形捧在双手里，猫咪叼在嘴里。</summary>
+        /// <summary>抓取按钮回调。空手且附近有木箱时，取出对应食材模型：人形捧在双手里，猫咪叼在嘴里。</summary>
         public void TryGrab()
         {
             if (heldItem != null) return;                       // 手上已有物品：第一版不做任何处理
             if (mapLoader == null) return;
 
-            Transform box = FindNearestBox();
-            if (box == null) return;                            // 附近没有木箱：不响应
+            MapLoader.BoxSlot slot = FindNearestBox();
+            if (slot.box == null) return;                       // 附近没有木箱：不响应
 
-            if (mouthAnchor != null) SpawnHeldItemOnAnchor(mouthAnchor);
-            else if (animator != null) SpawnHeldItemOnChest();
+            if (mouthAnchor != null) SpawnHeldItemOnAnchor(slot, mouthAnchor);
+            else if (animator != null) SpawnHeldItemOnChest(slot);
         }
 
-        private Transform FindNearestBox()
+        private MapLoader.BoxSlot FindNearestBox()
         {
-            Transform nearest = null;
+            var nearest = new MapLoader.BoxSlot();
             float best = grabRange * grabRange;
-            foreach (var box in mapLoader.Boxes)
+            foreach (var slot in mapLoader.Boxes)
             {
-                if (box == null) continue;
+                if (slot.box == null) continue;
                 float dxz = Vector2.SqrMagnitude(new Vector2(
-                    box.position.x - transform.position.x,
-                    box.position.z - transform.position.z));
-                if (dxz <= best) { best = dxz; nearest = box; }
+                    slot.box.position.x - transform.position.x,
+                    slot.box.position.z - transform.position.z));
+                if (dxz <= best) { best = dxz; nearest = slot; }
             }
             return nearest;
         }
 
-        // 猫咪等无骨骼模型：绿球直接挂嘴部锚点
-        private void SpawnHeldItemOnAnchor(Transform anchor)
+        // 猫咪等无骨骼模型：食材模型挂嘴部锚点
+        private void SpawnHeldItemOnAnchor(MapLoader.BoxSlot slot, Transform anchor)
         {
-            BuildHeldItem();
+            BuildHeldItem(slot);
             heldItem.transform.SetParent(anchor, false);
             heldItem.transform.localPosition = Vector3.zero;
         }
 
-        // 人形模型：绿球挂在胸部骨骼前（世界位置保持，随骨骼摆动）
-        private void SpawnHeldItemOnChest()
+        // 人形模型：食材模型挂在胸部骨骼前（世界位置保持，随骨骼摆动）
+        private void SpawnHeldItemOnChest(MapLoader.BoxSlot slot)
         {
             Transform chest = animator.GetBoneTransform(HumanBodyBones.Chest);
             if (chest == null) chest = animator.GetBoneTransform(HumanBodyBones.Spine);
             if (chest == null) return;
 
-            BuildHeldItem();
+            BuildHeldItem(slot);
             heldItem.transform.position = chest.position
                                          + modelPivot.forward * 0.35f
                                          + Vector3.up * 0.1f;
             heldItem.transform.SetParent(chest, true);           // 跟随胸部骨骼
         }
 
-        private void BuildHeldItem()
+        private void BuildHeldItem(MapLoader.BoxSlot slot)
+        {
+            heldItem = slot.itemModel != null
+                ? Instantiate(slot.itemModel)                   // 图例 model 字段指定的食材模型
+                : CreateFallbackSphere();                       // 模型缺失时的兜底（导入器通常已保证存在）
+
+            heldItem.name = "HeldItem";
+            foreach (var col in heldItem.GetComponentsInChildren<Collider>())
+                Object.Destroy(col);                            // 纯视觉挂件，不参与物理
+
+            FixMissingTextures(heldItem, slot.fallbackMaterial);
+            NormalizeSize(heldItem, itemRadius * 2f);           // 不管 fbx 原始多大，统一缩到手持尺寸
+        }
+
+        /// <summary>图例缺模型时的兜底：原来的绿色小球。</summary>
+        private GameObject CreateFallbackSphere()
         {
             if (itemMaterial == null)
                 itemMaterial = new Material(Shader.Find("Standard")) { color = new Color(0.2f, 0.75f, 0.3f) };
 
-            heldItem = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            heldItem.name = "HeldItem";
-            Object.Destroy(heldItem.GetComponent<Collider>());   // 纯视觉挂件，不参与物理
-            heldItem.GetComponent<Renderer>().sharedMaterial = itemMaterial;
-            heldItem.transform.localScale = Vector3.one * itemRadius * 2f;
+            var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            sphere.GetComponent<Renderer>().sharedMaterial = itemMaterial;
+            sphere.transform.localScale = Vector3.one * itemRadius * 2f;
+            return sphere;
+        }
+
+        /// <summary>
+        /// fbx 引用的外部贴图缺失时（导入后材质没有贴图）渲染会发白，
+        /// 用导入器按图例图片烘焙的兜底材质补上；自带贴图的模型不受影响。
+        /// </summary>
+        private static void FixMissingTextures(GameObject root, Material fallback)
+        {
+            if (fallback == null) return;
+            foreach (var rend in root.GetComponentsInChildren<Renderer>())
+            {
+                var mats = rend.sharedMaterials;
+                bool changed = false;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    if (mats[i] != null && mats[i].mainTexture != null) continue;
+                    mats[i] = fallback;
+                    changed = true;
+                }
+                if (changed) rend.sharedMaterials = mats;
+            }
+        }
+
+        /// <summary>把 root 的整体包围盒最大边长等比缩放到 targetSize（不改朝向和比例）。</summary>
+        private static void NormalizeSize(GameObject root, float targetSize)
+        {
+            Bounds bounds = ComputeBounds(root);
+            float maxDim = Mathf.Max(bounds.size.x, Mathf.Max(bounds.size.y, bounds.size.z));
+            if (maxDim > 1e-4f)
+                root.transform.localScale *= targetSize / maxDim;
+        }
+
+        /// 合并所有子网格的包围盒（世界空间）。fbx 根节点常带缩放/旋转偏移，须走矩阵变换而非直接取 size。
+        private static Bounds ComputeBounds(GameObject root)
+        {
+            bool hasAny = false;
+            var bounds = new Bounds(root.transform.position, Vector3.zero);
+            foreach (var mf in root.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.sharedMesh == null) continue;
+                var b = TransformBounds(mf.transform.localToWorldMatrix, mf.sharedMesh.bounds);
+                if (!hasAny) { bounds = b; hasAny = true; }
+                else bounds.Encapsulate(b);
+            }
+            return hasAny ? bounds : new Bounds(root.transform.position, new Vector3(0.2f, 0.2f, 0.2f));
+        }
+
+        /// AABB 经矩阵（可含旋转/非均匀缩放）变换：变换 8 个角点后重新包络。
+        private static Bounds TransformBounds(Matrix4x4 m, Bounds b)
+        {
+            Vector3 center = m.MultiplyPoint3x4(b.center);
+            Vector3 e = b.extents;
+            var ext = new Vector3(
+                Mathf.Abs(m.m00) * e.x + Mathf.Abs(m.m01) * e.y + Mathf.Abs(m.m02) * e.z,
+                Mathf.Abs(m.m10) * e.x + Mathf.Abs(m.m11) * e.y + Mathf.Abs(m.m12) * e.z,
+                Mathf.Abs(m.m20) * e.x + Mathf.Abs(m.m21) * e.y + Mathf.Abs(m.m22) * e.z);
+            return new Bounds(center, ext * 2f);
         }
 
         /// <summary>由模型实例上的 PlayerHandIK 在 OnAnimatorIK 中调用（IK 必须与 Animator 同节点）。</summary>
