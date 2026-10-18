@@ -16,6 +16,7 @@ namespace RollABallEditorTools
         private const string ScenePath = "Assets/Scenes/DemoScene.unity";
         private const string RegistryPath = "Assets/GameInfo/ItemRegistry.asset";
         private const string LevelRegistryPath = "Assets/GameInfo/LevelRegistry.asset";
+        private const string HouseFolder = "Assets/House/RestaurantBits";
 
         [MenuItem("Tools/Roll-a-Ball/5 - 给场景添加任务卡、积分与结算面板")]
         public static void AddTaskCardsToDemoScene()
@@ -61,7 +62,34 @@ namespace RollABallEditorTools
             loader.levelRegistry = AssetDatabase.LoadAssetAtPath<LevelRegistry>(LevelRegistryPath);
             if (loader.levelRegistry == null)
                 Debug.LogWarning($"[TaskCardsScenePatcher] 未找到 {LevelRegistryPath}，请先跑菜单 3（会顺带烘焙关卡列表）");
+
+            InjectHouseShell(loader);
             return ui;
+        }
+
+        /// <summary>注入房屋外墙模型与统一材质（KayKit OBJ；缺模型时 MapLoader 自动跳过外壳）。</summary>
+        private static void InjectHouseShell(MapLoader loader)
+        {
+            loader.houseWallModel = AssetDatabase.LoadAssetAtPath<GameObject>($"{HouseFolder}/wall.obj");
+            loader.housePillarModel = AssetDatabase.LoadAssetAtPath<GameObject>($"{HouseFolder}/pillar_A.obj");
+            loader.houseMaterial = GetOrCreateHouseMaterial();
+            if (loader.houseWallModel == null)
+                Debug.LogWarning($"[TaskCardsScenePatcher] 未找到 {HouseFolder}/wall.obj，房屋外墙不生成" +
+                                 "（把 KayKit Restaurant Bits 的 obj 与贴图拷到该目录）");
+        }
+
+        private static Material GetOrCreateHouseMaterial()
+        {
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>($"{HouseFolder}/restaurantbits_texture.png");
+            var mat = AssetDatabase.LoadAssetAtPath<Material>($"{HouseFolder}/HouseWall.mat");
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Standard"));
+                AssetDatabase.CreateAsset(mat, $"{HouseFolder}/HouseWall.mat");
+            }
+            if (tex != null) mat.mainTexture = tex;
+            EditorUtility.SetDirty(mat);
+            return mat;
         }
 
         /// <summary>创建并注入关卡流程组件（胜利/失败判定与结算面板）。</summary>

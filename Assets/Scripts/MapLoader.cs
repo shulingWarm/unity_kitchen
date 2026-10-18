@@ -34,6 +34,12 @@ namespace RollABall
         public float pickupScale = 0.6f;
         public float boxSize = 1.6f;    // 木箱边长；格子 2.0 留 0.4 缝，球直径 1.0 钻不进，碰撞用箱子自身即可
 
+        [Header("房屋外壳（KayKit 模型，编辑器菜单 5 注入；缺模型时自动跳过）")]
+        public GameObject houseWallModel;       // 直墙段
+        public GameObject housePillarModel;     // 墙角柱（可选）
+        public Material houseMaterial;          // 统一贴图材质（空 = 用模型自带材质）
+        public bool buildHouseShell = true;     // 北/西/东三面墙；南侧留空只加隐形挡板
+
         /// 运行时生成的所有木箱（抓取功能的距离查询用）
         public List<BoxSlot> Boxes { get; } = new List<BoxSlot>();
 
@@ -67,6 +73,7 @@ namespace RollABall
 
             BuildGround();
             BuildObstacles();
+            BuildHouseShell();
             PlacePlayer();
             FrameCamera();
             SetupGameTimer();
@@ -236,6 +243,131 @@ namespace RollABall
             top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
             top.AddComponent<ConveyorScroller>();
             ServingStations.Add(counter.transform);
+        }
+
+        // ---------------- 房屋外壳 ----------------
+
+        /// <summary>
+        /// 房屋外壳：北/西/东三面墙（模型段铺设 + 整条碰撞体），南侧留空只放隐形挡板防掉落。
+        /// 墙体铺在网格外圈线上，不占用任何格子；地板由合作开发者负责，这里不碰。
+        /// </summary>
+        private void BuildHouseShell()
+        {
+            if (!buildHouseShell || houseWallModel == null) return;
+
+            var shell = new GameObject("HouseShell");
+            shell.transform.SetParent(transform, false);
+            shell.isStatic = true;   // 静态几何，利于合批
+
+            // 墙段走向与缩放：按模型包围盒自动对齐格子宽度（KayKit 一段 ≈ 1 米模块）
+            Bounds wallBounds = ComputeLocalBounds(houseWallModel);
+            float runLength = Mathf.Max(wallBounds.size.x, wallBounds.size.z);
+            float scale = map.cellSize / Mathf.Max(runLength, 1e-4f);
+            bool runsAlongX = wallBounds.size.x >= wallBounds.size.z;   // 模型自身的走向轴
+            float wallTop = Mathf.Max(wallBounds.size.y * scale, 1f);
+            float baseY = -wallBounds.min.y * scale;                    // 模型轴心不在脚底时贴地校正
+
+            float westX = map.CellToWorld(0, 0).x - map.cellSize * 0.5f;
+            float eastX = map.CellToWorld(0, map.cols - 1).x + map.cellSize * 0.5f;
+            float northZ = map.CellToWorld(0, 0).z + map.cellSize * 0.5f;
+            float southZ = map.CellToWorld(map.rows - 1, 0).z - map.cellSize * 0.5f;
+
+            // 北墙：一整排
+            for (int c = 0; c < map.cols; c++)
+                PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
+                    new Vector3(map.CellToWorld(0, c).x, baseY, northZ), runsAlongX ? 0f : 90f, scale, $"North_{c}");
+            // 西墙 / 东墙：两列
+            for (int r = 0; r < map.rows; r++)
+            {
+                float yaw = runsAlongX ? 90f : 0f;
+                PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
+                    new Vector3(westX, baseY, map.CellToWorld(r, 0).z), yaw, scale, $"West_{r}");
+                PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
+                    new Vector3(eastX, baseY, map.CellToWorld(r, 0).z), yaw, scale, $"East_{r}");
+            }
+            // 四角柱（南侧两根只为收边好看）
+            if (housePillarModel != null)
+            {
+                Bounds pillarBounds = ComputeLocalBounds(housePillarModel);
+                float pillarBaseY = -pillarBounds.min.y * scale;
+                Vector3[] corners =
+                {
+                    new Vector3(westX, pillarBaseY, northZ),
+                    new Vector3(eastX, pillarBaseY, northZ),
+                    new Vector3(westX, pillarBaseY, southZ),
+                    new Vector3(eastX, pillarBaseY, southZ),
+                };
+                for (int i = 0; i < corners.Length; i++)
+                    PlaceWallSegment(shell.transform, housePillarModel, houseMaterial, corners[i], 0f, scale, $"Pillar_{i}");
+            }
+
+            // 碰撞：三条整墙 + 南侧隐形挡板（各自一个盒子，比逐段加省且稳定）
+            AddShellCollider(shell, new Vector3(0f, wallTop * 0.5f, northZ),
+                new Vector3(map.cols * map.cellSize + map.cellSize, wallTop, map.cellSize * 0.5f));
+            AddShellCollider(shell, new Vector3(westX, wallTop * 0.5f, 0f),
+                new Vector3(map.cellSize * 0.5f, wallTop, map.rows * map.cellSize + map.cellSize));
+            AddShellCollider(shell, new Vector3(eastX, wallTop * 0.5f, 0f),
+                new Vector3(map.cellSize * 0.5f, wallTop, map.rows * map.cellSize + map.cellSize));
+            AddShellCollider(shell, new Vector3(0f, wallTop * 0.5f, southZ),
+                new Vector3(map.cols * map.cellSize + map.cellSize, wallTop, map.cellSize * 0.5f));
+
+            Debug.Log($"[MapLoader] 房屋外壳完成：北 {map.cols} 段 + 东西各 {map.rows} 段，墙高 {wallTop:0.00}m");
+        }
+
+        private void PlaceWallSegment(Transform parent, GameObject model, Material material,
+            Vector3 position, float yaw, float scale, string name)
+        {
+            var seg = Instantiate(model, parent);
+            seg.name = name;
+            seg.isStatic = true;
+            seg.transform.localPosition = position;
+            seg.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            seg.transform.localScale = Vector3.one * scale;
+            if (material != null)
+                foreach (var rend in seg.GetComponentsInChildren<Renderer>())
+                    rend.sharedMaterial = material;   // 整包共用一张色板图，单材质即可
+        }
+
+        private static void AddShellCollider(GameObject shell, Vector3 center, Vector3 size)
+        {
+            var go = new GameObject("ShellCollider");
+            go.transform.SetParent(shell.transform, false);
+            go.transform.localPosition = center;
+            go.AddComponent<BoxCollider>().size = size;
+        }
+
+        /// <summary>计算模型 prefab 相对根节点的本地包围盒（未实例化时用）。</summary>
+        private static Bounds ComputeLocalBounds(GameObject prefab)
+        {
+            bool hasAny = false;
+            var bounds = new Bounds();
+            foreach (var mf in prefab.GetComponentsInChildren<MeshFilter>())
+            {
+                if (mf.sharedMesh == null) continue;
+                var matrix = Matrix4x4.identity;
+                var t = mf.transform;
+                while (t != null && t != prefab.transform)
+                {
+                    matrix = Matrix4x4.TRS(t.localPosition, t.localRotation, t.localScale) * matrix;
+                    t = t.parent;
+                }
+                var b = TransformLocalBounds(matrix, mf.sharedMesh.bounds);
+                if (!hasAny) { bounds = b; hasAny = true; }
+                else bounds.Encapsulate(b);
+            }
+            return hasAny ? bounds : new Bounds(Vector3.zero, Vector3.one);
+        }
+
+        /// <summary>AABB 经矩阵（可含旋转/非均匀缩放）变换：变换 8 个角点后重新包络。</summary>
+        private static Bounds TransformLocalBounds(Matrix4x4 m, Bounds b)
+        {
+            Vector3 center = m.MultiplyPoint3x4(b.center);
+            Vector3 e = b.extents;
+            var ext = new Vector3(
+                Mathf.Abs(m.m00) * e.x + Mathf.Abs(m.m01) * e.y + Mathf.Abs(m.m02) * e.z,
+                Mathf.Abs(m.m10) * e.x + Mathf.Abs(m.m11) * e.y + Mathf.Abs(m.m12) * e.z,
+                Mathf.Abs(m.m20) * e.x + Mathf.Abs(m.m21) * e.y + Mathf.Abs(m.m22) * e.z);
+            return new Bounds(center, ext * 2f);
         }
 
         private void PlacePlayer()
