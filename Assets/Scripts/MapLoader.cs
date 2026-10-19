@@ -40,6 +40,13 @@ namespace RollABall
         public Material houseMaterial;          // 统一贴图材质（空 = 用模型自带材质）
         public bool buildHouseShell = true;     // 北/西/东三面墙；南侧留空只加隐形挡板
 
+        [Header("切菜板工作站（cut 格，编辑器菜单 5 注入；缺模型时只生成底座）")]
+        public GameObject cutBoardModel;        // 菜板
+        public GameObject cutKnifeModel;        // 菜板上的刀
+
+        /// 运行时生成的所有切菜板（后续切菜交互的就近查询用）
+        public List<Transform> CutStations { get; } = new List<Transform>();
+
         /// 运行时生成的所有木箱（抓取功能的距离查询用）
         public List<BoxSlot> Boxes { get; } = new List<BoxSlot>();
 
@@ -144,6 +151,8 @@ namespace RollABall
             boxesRoot.transform.SetParent(transform, false);
             var servingRoot = new GameObject("Serving");
             servingRoot.transform.SetParent(transform, false);
+            var cutRoot = new GameObject("CutStations");
+            cutRoot.transform.SetParent(transform, false);
 
             for (int r = 0; r < map.rows; r++)
             {
@@ -153,6 +162,7 @@ namespace RollABall
                     if (t == "1") BuildWallCell(wallsRoot.transform, r, c);
                     else if (t.Length > 1 && t[0] == 'w') BuildBox(boxesRoot.transform, r, c, t);
                     else if (t[0] == 's') BuildServingCell(servingRoot.transform, r, c, t);
+                    else if (t == "cut") BuildCutStation(cutRoot.transform, r, c);
                 }
             }
         }
@@ -243,6 +253,71 @@ namespace RollABall
             top.transform.localPosition = new Vector3(0f, 0.5f + 0.002f, 0f);
             top.AddComponent<ConveyorScroller>();
             ServingStations.Add(counter.transform);
+        }
+
+        // ---------------- 切菜板工作站 ----------------
+
+        /// <summary>
+        /// 切菜板工作站（cut 格）：墙高底座（与墙同款材质、带碰撞）+ 顶面菜板 + 板上刀。
+        /// 模型按包围盒自动归一化：菜板宽 ≈ 格子的 70%，刀沿用同一缩放比例平放板面中央。
+        /// </summary>
+        private void BuildCutStation(Transform parent, int r, int c)
+        {
+            var baseBlock = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            baseBlock.name = $"CutStation_{r}_{c}";
+            baseBlock.transform.SetParent(parent, false);
+            baseBlock.transform.localScale = new Vector3(map.cellSize, wallHeight, map.cellSize);
+            baseBlock.transform.position = map.CellToWorld(r, c) + Vector3.up * (wallHeight * 0.5f);
+            baseBlock.GetComponent<Renderer>().sharedMaterial = wallMaterial;
+            CutStations.Add(baseBlock.transform);
+
+            if (cutBoardModel == null)
+            {
+                Debug.LogWarning($"[MapLoader] cut ({r},{c}) 缺少菜板模型，只生成底座（跑菜单 5 注入）");
+                return;
+            }
+
+            // 菜板：宽度归一化到格子的 70%，底面贴住底座顶面
+            Vector3 topCenter = map.CellToWorld(r, c) + Vector3.up * wallHeight;
+            var board = Instantiate(cutBoardModel, parent);
+            board.name = "CutBoard";
+            board.isStatic = true;
+            Bounds boardBounds = ComputeWorldBounds(board);
+            float boardWidth = Mathf.Max(boardBounds.size.x, boardBounds.size.z);
+            float scale = (map.cellSize * 0.7f) / Mathf.Max(boardWidth, 1e-4f);
+            PlaceStationModel(board, topCenter, scale);
+
+            // 刀：沿用菜板的缩放比例，平放板面中央（轻微下压避免悬空）
+            if (cutKnifeModel != null)
+            {
+                var knife = Instantiate(cutKnifeModel, parent);
+                knife.name = "CutKnife";
+                knife.isStatic = true;
+                Bounds boardTop = ComputeWorldBounds(board);
+                var knifeAnchor = new Vector3(topCenter.x, boardTop.max.y - boardTop.size.y * 0.02f, topCenter.z);
+                PlaceStationModel(knife, knifeAnchor, scale);
+            }
+        }
+
+        /// <summary>合并 go 所有渲染器的世界包围盒。</summary>
+        private static Bounds ComputeWorldBounds(GameObject go)
+        {
+            var renderers = go.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return new Bounds(go.transform.position, Vector3.one);
+            var b = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++) b.Encapsulate(renderers[i].bounds);
+            return b;
+        }
+
+        /// <summary>按世界缩放倍率缩放模型，并把包围盒底面中心对齐到 anchor。</summary>
+        private static void PlaceStationModel(GameObject model, Vector3 anchor, float scale)
+        {
+            model.transform.localScale = Vector3.one * scale;
+            Bounds b = ComputeWorldBounds(model);
+            model.transform.position += new Vector3(
+                anchor.x - b.center.x,
+                anchor.y - b.min.y,
+                anchor.z - b.center.z);
         }
 
         // ---------------- 房屋外壳 ----------------

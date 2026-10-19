@@ -10,7 +10,7 @@ namespace RollABallEditorTools
 {
     /// <summary>
     /// 把工程根 maps/*.txt 解析校验后转成 Assets/Maps/*.asset（MapData）。
-    /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/p/wN/s1-s4；
+    /// 网格行：单元格用空白（tab/空格）分隔，token 为 0/1/cut/p/wN/s1-s4；
     /// 兼容旧格式：整行无分隔符且长度等于列数时按单字符解析。
     /// 图例区（均在网格行之后，空行随意）：
     ///   「wN:」小节 → image:/model:/object: 三个标签字段（顶图、取出物品 fbx、object.json 物品 id）；
@@ -170,6 +170,8 @@ namespace RollABallEditorTools
                         case "s3":   // 出餐口朝左
                         case "s4":   // 出餐口朝右
                             break;
+                        case "cut":  // 切菜板工作站（墙高底座 + 菜板 + 刀）
+                            break;
                         case "p":
                             pCount++;
                             spawn = new Vector2Int(r, c);
@@ -181,7 +183,7 @@ namespace RollABallEditorTools
                         default:
                             if (!BoxToken.IsMatch(t))
                                 throw new System.Exception(
-                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/p/wN/s1-s4）");
+                                    $"第 {r + 2} 行第 {c + 1} 格 '{tokens[c]}' 非法（只允许 0/1/cut/p/wN/s1-s4）");
                             usedBoxTokens.Add(t);
                             break;
                     }

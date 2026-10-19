@@ -490,7 +490,7 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 463684572}
   m_CullTransparentMesh: 1
---- !u!1 &670695582
+--- !u!1 &674745826
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -498,34 +498,36 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 670695584}
-  - component: {fileID: 670695583}
+  - component: {fileID: 674745828}
+  - component: {fileID: 674745827}
   m_Layer: 0
-  m_Name: ScoreUI
+  m_Name: GameFlowUI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &670695583
+--- !u!114 &674745827
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 670695582}
+  m_GameObject: {fileID: 674745826}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 34d3d538d15b1ac4da24acbe41853746, type: 3}
+  m_Script: {fileID: 11500000, guid: 70f313fc5a492e846ae4339971778c4f, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RollABall.ScoreUI
---- !u!4 &670695584
+  m_EditorClassIdentifier: Assembly-CSharp::RollABall.GameFlowUI
+  mapLoader: {fileID: 1602586839}
+  levelRegistry: {fileID: 11400000, guid: 35ab7502476a321409bcd2bc0a191100, type: 2}
+--- !u!4 &674745828
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 670695582}
+  m_GameObject: {fileID: 674745826}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -730,7 +732,7 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0, y: 0}
---- !u!1 &1039867747
+--- !u!1 &868214981
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -738,36 +740,80 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 1039867749}
-  - component: {fileID: 1039867748}
+  - component: {fileID: 868214983}
+  - component: {fileID: 868214982}
   m_Layer: 0
-  m_Name: GameFlowUI
+  m_Name: TaskCardsUI
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1039867748
+--- !u!114 &868214982
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1039867747}
+  m_GameObject: {fileID: 868214981}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 70f313fc5a492e846ae4339971778c4f, type: 3}
+  m_Script: {fileID: 11500000, guid: cbb5ba03f8f6d114c85839cbce69d69e, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RollABall.GameFlowUI
+  m_EditorClassIdentifier: Assembly-CSharp::RollABall.TaskCardsUI
   mapLoader: {fileID: 1602586839}
-  levelRegistry: {fileID: 11400000, guid: 35ab7502476a321409bcd2bc0a191100, type: 2}
---- !u!4 &1039867749
+  registry: {fileID: 11400000, guid: 4a653b9684ca90b40a1b12fe1b535d70, type: 2}
+--- !u!4 &868214983
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1039867747}
+  m_GameObject: {fileID: 868214981}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &883924409
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 883924411}
+  - component: {fileID: 883924410}
+  m_Layer: 0
+  m_Name: ScoreUI
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &883924410
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 883924409}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 34d3d538d15b1ac4da24acbe41853746, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RollABall.ScoreUI
+--- !u!4 &883924411
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 883924409}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -1386,6 +1432,8 @@ MonoBehaviour:
   housePillarModel: {fileID: 919132149155446097, guid: b2eed2f295e88dc458916a8d059b406b, type: 3}
   houseMaterial: {fileID: 2100000, guid: 912eb40f9ebfead48b443e359acb95c2, type: 2}
   buildHouseShell: 1
+  cutBoardModel: {fileID: 919132149155446097, guid: db32a6a19f770ac42ba70472bc36b9b0, type: 3}
+  cutKnifeModel: {fileID: 919132149155446097, guid: b2d12f4203886c74ab1d9426f1990931, type: 3}
 --- !u!4 &1602586840
 Transform:
   m_ObjectHideFlags: 0
@@ -1611,52 +1659,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1893496918}
   m_CullTransparentMesh: 1
---- !u!1 &1986340981
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1986340983}
-  - component: {fileID: 1986340982}
-  m_Layer: 0
-  m_Name: TaskCardsUI
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1986340982
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1986340981}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: cbb5ba03f8f6d114c85839cbce69d69e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RollABall.TaskCardsUI
-  mapLoader: {fileID: 1602586839}
-  registry: {fileID: 11400000, guid: 4a653b9684ca90b40a1b12fe1b535d70, type: 2}
---- !u!4 &1986340983
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1986340981}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &2126924640
 GameObject:
   m_ObjectHideFlags: 0
@@ -1743,6 +1745,6 @@ SceneRoots:
   - {fileID: 861341218}
   - {fileID: 400908361}
   - {fileID: 433171294}
-  - {fileID: 1986340983}
-  - {fileID: 670695584}
-  - {fileID: 1039867749}
+  - {fileID: 868214983}
+  - {fileID: 883924411}
+  - {fileID: 674745828}

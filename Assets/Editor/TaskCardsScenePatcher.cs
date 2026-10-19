@@ -73,6 +73,10 @@ namespace RollABallEditorTools
                 Debug.LogWarning($"[TaskCardsScenePatcher] 未找到 {LevelRegistryPath}，请先跑菜单 3（会顺带烘焙关卡列表）");
 
             InjectHouseShell(loader);
+
+            // 切菜板工作站模型（cut 格渲染用；缺失时 MapLoader 只生成底座并告警）
+            loader.cutBoardModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/cube_images/cutting-board.fbx");
+            loader.cutKnifeModel = AssetDatabase.LoadAssetAtPath<GameObject>("Assets/cube_images/cooking-knife-chopping.fbx");
             return ui;
         }
 
