@@ -54,8 +54,53 @@ namespace RollABall
             Vector2 input = VirtualJoystick.InputVector;
             if (input.sqrMagnitude < 0.01f) return;
 
-            Vector3 move = CameraRelativeDirection(input) * moveSpeed;
-            rb.MovePosition(rb.position + move * Time.fixedDeltaTime);
+            Vector3 step = CameraRelativeDirection(input) * (moveSpeed * Time.fixedDeltaTime);
+            rb.MovePosition(rb.position + MoveWithCollision(rb.position, step));
+        }
+
+        /// <summary>
+        /// 带碰撞限位的移动：用胶囊扫掠保证目标点绝不进入墙体/箱子（含拐角缝隙）。
+        /// 根治旧的 MovePosition 穿模问题——它每帧强行设位、碰撞感知为零，
+        /// 拐角接触法向二义性时与去穿透互相打架，角色会被挤进墙里。
+        /// 被挡后去掉入墙分量再扫一趟，剩余量沿墙面滑行，贴墙走更流畅。
+        /// 地上的动态物品（WorldItem）不参与限位，维持可推开的表现。
+        /// </summary>
+        private Vector3 MoveWithCollision(Vector3 position, Vector3 step)
+        {
+            const float skin = 0.02f;
+            Vector3 remaining = step;
+            Vector3 moved = Vector3.zero;
+
+            // 两趟扫掠：第一趟撞墙后去掉入墙分量，第二趟沿墙滑行（L 形拐角两堵墙各一趟）
+            for (int pass = 0; pass < 2 && remaining.sqrMagnitude > 1e-8f; pass++)
+            {
+                Vector3 dir = remaining.normalized;
+                float maxDist = remaining.magnitude;
+
+                float nearest = float.MaxValue;
+                Vector3 nearestNormal = Vector3.zero;
+                bool blocked = false;
+                foreach (var hit in rb.SweepTestAll(dir, maxDist + skin, QueryTriggerInteraction.Ignore))
+                {
+                    var hitRb = hit.collider.attachedRigidbody;
+                    if (hitRb != null && !hitRb.isKinematic) continue;   // 地上物品是动态刚体：不挡路
+                    blocked = true;
+                    if (hit.distance < nearest)
+                    {
+                        nearest = hit.distance;
+                        nearestNormal = hit.normal;
+                    }
+                }
+
+                float travel = blocked ? Mathf.Clamp(nearest - skin, 0f, maxDist) : maxDist;
+                Vector3 delta = dir * travel;
+                moved += delta;
+                remaining -= delta;
+
+                if (blocked && travel + 1e-6f < maxDist)
+                    remaining -= nearestNormal * Vector3.Dot(remaining, nearestNormal);   // 去掉入墙分量 → 沿墙滑行
+            }
+            return moved;
         }
 
         private void Update()
