@@ -20,6 +20,7 @@ namespace RollABallEditorTools
         private const string LevelRegistryPath = "Assets/GameInfo/LevelRegistry.asset";
         private const string HouseFolder = "Assets/House/RestaurantBits";
         private const string ThrowIconPath = "Assets/UI/button_icon/throw.png";
+        private const string InteractIconPath = "Assets/UI/button_icon/interact.png";
 
         [MenuItem("Tools/Roll-a-Ball/5 - 给场景添加任务卡、积分与结算面板")]
         public static void AddTaskCardsToDemoScene()
@@ -50,8 +51,12 @@ namespace RollABallEditorTools
             // 投掷按钮（已存在时只重新注入引用）
             var canvas = Object.FindFirstObjectByType<Canvas>();
             var pc = loader.player != null ? loader.player.GetComponent<PlayerController>() : null;
-            if (canvas != null && pc != null) CreateThrowButton(canvas, pc);
-            else Debug.LogWarning("[TaskCardsScenePatcher] 场景缺少 Canvas 或 player 引用，投掷按钮未创建");
+            if (canvas != null && pc != null)
+            {
+                CreateThrowButton(canvas, pc);
+                CreateInteractButton(canvas, pc);
+            }
+            else Debug.LogWarning("[TaskCardsScenePatcher] 场景缺少 Canvas 或 player 引用，投掷/交互按钮未创建");
 
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
@@ -112,6 +117,61 @@ namespace RollABallEditorTools
             flow.mapLoader = loader;
             flow.levelRegistry = loader.levelRegistry;
             return flow;
+        }
+
+        /// <summary>
+        /// 创建场景交互按钮（投掷按钮左侧，同款圆环 + interact.png 图标）。
+        /// 已存在时仅重新注入玩家引用；图标缺失时只有圆环不阻塞。交互逻辑由后续版本接入。
+        /// </summary>
+        public static GameObject CreateInteractButton(Canvas canvas, PlayerController player)
+        {
+            var existing = Object.FindFirstObjectByType<InteractButton>(FindObjectsInactive.Include);
+            if (existing != null)
+            {
+                existing.player = player;
+                return existing.gameObject;
+            }
+
+            var go = new GameObject("InteractButton",
+                typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(InteractButton));
+            go.GetComponent<InteractButton>().player = player;
+            go.transform.SetParent(canvas.transform, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(1f, 0f);
+            rt.anchorMax = new Vector2(1f, 0f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(150f, 150f);
+            rt.anchoredPosition = new Vector2(-500f, 150f);   // 投掷按钮（-330,150）左侧，三键一排
+            var img = go.GetComponent<Image>();
+            img.sprite = DemoSceneBuilder.GetOrCreateRingSprite();
+            img.color = new Color(1f, 1f, 1f, 0.5f);
+
+            if (File.Exists(InteractIconPath))
+            {
+                DemoSceneBuilder.ForceSpriteImport(InteractIconPath);
+                var iconSprite = AssetDatabase.LoadAssetAtPath<Sprite>(InteractIconPath);
+                if (iconSprite != null)
+                {
+                    var iconGO = new GameObject("Icon", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                    iconGO.transform.SetParent(go.transform, false);
+                    var iconRt = (RectTransform)iconGO.transform;
+                    iconRt.anchorMin = iconRt.anchorMax = iconRt.pivot = new Vector2(0.5f, 0.5f);
+                    iconRt.sizeDelta = new Vector2(98f, 98f);
+                    var iconImg = iconGO.GetComponent<Image>();
+                    iconImg.sprite = iconSprite;
+                    iconImg.color = new Color(1f, 1f, 1f, 0.5f);
+                    iconImg.raycastTarget = false;
+                }
+                else
+                {
+                    Debug.LogWarning($"[TaskCardsScenePatcher] {InteractIconPath} 导入后拿不到 Sprite，交互按钮只有圆环");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[TaskCardsScenePatcher] 找不到 {InteractIconPath}，交互按钮只有圆环");
+            }
+            return go;
         }
 
         /// <summary>

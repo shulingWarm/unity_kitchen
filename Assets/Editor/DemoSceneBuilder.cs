@@ -263,6 +263,9 @@ namespace RollABallEditorTools
             // 投掷按钮（抓取按钮左侧，同款圆环 + throw.png 图标）
             TaskCardsScenePatcher.CreateThrowButton(canvas, player.GetComponent<PlayerController>());
 
+            // 场景交互按钮（投掷按钮左侧，通用交互入口，逻辑后续接入）
+            TaskCardsScenePatcher.CreateInteractButton(canvas, player.GetComponent<PlayerController>());
+
             // 倒计时条（右下角，UI 由组件运行时自建）
             new GameObject("CountdownTimerUI", typeof(CountdownTimerUI));
 
