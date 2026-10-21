@@ -7,7 +7,8 @@ namespace RollABall
     /// 玩家（人形角色）：读取虚拟摇杆输入做相机相对移动，
     /// 模型朝移动方向转身，Animator 按移动状态切换 Idle/Walk。
     /// 抓取/放置/拾取/交付共用一个按钮，按状态自动分流：
-    /// 手持物品 → 出餐口旁交付（物品必消耗，命中任务卡才算完成）；否则原地放下（物理自由落体）。
+    /// 手持物品 → 出餐口旁交付（物品必消耗，命中任务卡才算完成）→ 置物台旁摆上台面（一台一物）
+    /// → 否则原地放下（物理自由落体）。
     /// 空手 → 先捡起近处地面物品（WorldItem），没有才从最近的木箱拿对应食材模型。
     /// 投掷（独立按钮）：沿玩家朝向把手中物品抛物线抛出，落地后成为可再拾取的地面物品。
     /// 手持物品统一挂在胸口骨骼上、双手 IK 捧住。
@@ -168,7 +169,20 @@ namespace RollABall
             {
                 if (mapLoader == null) return;
                 if (FindNearestServingStation() != null) { TryServe(); return; }   // 出餐优先
-                DropHeldItem();                                                    // 就地放下
+
+                // 置物台：面朝格子是内墙/木箱/切菜板 → 摆上台面（一台一物）；否则原地落地兜底
+                if (mapLoader.TryGetPlaceSurface(transform.position, FacingDir(), out Vector3 top, out string surfaceKey))
+                {
+                    if (WorldItem.KeyOccupied(surfaceKey))
+                    {
+                        Debug.Log($"[Player] 台面 {surfaceKey} 已有物品，放置无效");
+                        return;
+                    }
+                    PlaceHeldItem(top, surfaceKey);
+                    return;
+                }
+
+                DropHeldItem();                                                    // 无台面：原地落地兜底
                 return;
             }
 
@@ -387,6 +401,37 @@ namespace RollABall
             if (heldItem != null) Destroy(heldItem);
             heldItem = null;
             heldObjectId = null;
+        }
+
+        /// <summary>角色当前水平朝向（归一化）。</summary>
+        private Vector3 FacingDir()
+        {
+            Vector3 f = modelPivot != null ? modelPivot.forward : transform.forward;
+            f.y = 0f;
+            return f.sqrMagnitude > 1e-6f ? f.normalized : transform.forward;
+        }
+
+        /// <summary>
+        /// 把手里的物品摆到置物台顶面中心：直立、无物理（不会被碰倒/推开），
+        /// 登记 surfaceKey 占用台面（一台一物）；空手走近仍可拾取。
+        /// </summary>
+        private void PlaceHeldItem(Vector3 topCenter, string surfaceKey)
+        {
+            GameObject item = heldItem;
+            string objectId = heldObjectId;
+            heldItem = null;
+            heldObjectId = null;
+
+            item.transform.SetParent(null, true);
+            item.transform.rotation = Quaternion.identity;      // 直立摆放
+
+            Bounds wb = ComputeBounds(item);                    // 世界包围盒底面中心对齐台面顶
+            item.transform.position += topCenter - new Vector3(wb.center.x, wb.min.y, wb.center.z);
+
+            var worldItem = item.AddComponent<WorldItem>();
+            worldItem.objectId = objectId;
+            worldItem.surfaceKey = surfaceKey;
+            item.name = $"PlacedItem_{objectId}";
         }
 
         /// <summary>图例缺模型时的兜底：原来的绿色小球。</summary>

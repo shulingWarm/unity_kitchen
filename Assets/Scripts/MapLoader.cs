@@ -255,6 +255,62 @@ namespace RollABall
             ServingStations.Add(counter.transform);
         }
 
+        // ---------------- 置物台查询 ----------------
+
+        /// <summary>该 token 是否可作为置物台（内墙 / 木箱 / 切菜板底座，均为 wallHeight 高的静态块）。</summary>
+        public bool IsSurfaceToken(string t)
+            => t == "1" || t == "cut" || (t.Length > 1 && t[0] == 'w');
+
+        /// <summary>世界坐标 → 格子下标（CellToWorld 的逆变换）。</summary>
+        public bool WorldToCell(Vector3 world, out int r, out int c)
+        {
+            c = Mathf.RoundToInt(world.x / map.cellSize + (map.cols - 1) * 0.5f);
+            r = Mathf.RoundToInt((map.rows - 1) * 0.5f - world.z / map.cellSize);
+            return map.InRange(r, c);
+        }
+
+        public string GetCellToken(int r, int c) => map.InRange(r, c) ? cells[r, c] : "1";
+
+        /// <summary>
+        /// 沿 facing 找 origin 面前的置物台格子（内墙/木箱/切菜板）。
+        /// 命中返回台面顶面中心与占用键（格子坐标 r,c）；斜向朝向时先查主轴格，再查侧轴格。
+        /// </summary>
+        public bool TryGetPlaceSurface(Vector3 origin, Vector3 facing, out Vector3 topCenter, out string surfaceKey)
+        {
+            topCenter = default;
+            surfaceKey = default;
+
+            if (!WorldToCell(origin, out int r0, out int c0)) return false;
+            var f = new Vector2(facing.x, facing.z);
+            if (f.sqrMagnitude < 1e-6f) return false;
+            f.Normalize();
+
+            var candidates = new List<(int dr, int dc)>(2);
+            if (Mathf.Abs(f.x) >= Mathf.Abs(f.y))
+            {
+                candidates.Add((0, f.x > 0 ? 1 : -1));
+                if (Mathf.Abs(f.y) > 0.01f) candidates.Add((f.y > 0 ? 1 : -1, 0));
+            }
+            else
+            {
+                candidates.Add((f.y > 0 ? 1 : -1, 0));
+                if (Mathf.Abs(f.x) > 0.01f) candidates.Add((0, f.x > 0 ? 1 : -1));
+            }
+
+            foreach (var (dr, dc) in candidates)
+            {
+                int r = r0 + dr;
+                int c = c0 + dc;
+                if (!map.InRange(r, c)) continue;
+                if (!IsSurfaceToken(GetCellToken(r, c))) continue;
+
+                topCenter = map.CellToWorld(r, c) + Vector3.up * wallHeight;
+                surfaceKey = $"{r},{c}";
+                return true;
+            }
+            return false;
+        }
+
         // ---------------- 切菜板工作站 ----------------
 
         /// <summary>
