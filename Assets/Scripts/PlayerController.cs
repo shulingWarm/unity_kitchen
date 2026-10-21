@@ -49,6 +49,23 @@ namespace RollABall
             rb.constraints = RigidbodyConstraints.FreezeRotation;   // 人形不翻滚
         }
 
+        private void Start()
+        {
+            // 身高诊断：确认运行时模型尺寸与编辑器补丁结果一致（排查缩放被运行时重置）
+            if (modelPivot == null) { Debug.Log("[Player] 身高诊断：modelPivot 未配置"); return; }
+            var rends = modelPivot.GetComponentsInChildren<Renderer>();
+            if (rends.Length == 0) { Debug.Log("[Player] 身高诊断：模型下没有 Renderer"); return; }
+
+            var b = rends[0].bounds;
+            for (int i = 1; i < rends.Length; i++) b.Encapsulate(rends[i].bounds);
+
+            var childInfo = new System.Text.StringBuilder();
+            foreach (Transform child in modelPivot)
+                childInfo.Append($"[{child.name} 世界缩放={child.lossyScale.x:F2}] ");
+
+            Debug.Log($"[Player] 身高诊断：运行时模型实测 {b.size.y:F3}m，modelPivot 世界缩放 {modelPivot.lossyScale.x:F3}，子物体 {childInfo}");
+        }
+
         private void FixedUpdate()
         {
             Vector2 input = VirtualJoystick.InputVector;

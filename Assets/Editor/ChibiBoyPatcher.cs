@@ -42,9 +42,7 @@ namespace RollABallEditorTools
             var pivot = pc.modelPivot != null ? pc.modelPivot : pc.transform.Find("Model");
             if (pivot == null) { Debug.LogError("[ChibiBoyPatcher] 玩家身上没有 Model 节点"); return; }
 
-            float targetHeight = 2.12f;
-            var oldBounds = ComputeRendererBounds(pivot.gameObject);
-            if (oldBounds.size.y > 0.01f) targetHeight = oldBounds.size.y;
+            const float targetHeight = 1.8f;   // 定稿身高（改此值后重跑菜单 8 生效）：1m 内墙/切菜桌面正好齐腰，与胶囊碰撞体 1.8m 一致
 
             for (int i = pivot.childCount - 1; i >= 0; i--)
                 Object.DestroyImmediate(pivot.GetChild(i).gameObject);
@@ -70,12 +68,14 @@ namespace RollABallEditorTools
             pc.mouthAnchor = null;
 
             var bounds = ComputeRendererBounds(boy);
-            if (bounds.size.y > 0.0001f)
+            float naturalHeight = bounds.size.y;
+            if (naturalHeight > 0.0001f)
             {
-                float scale = targetHeight / bounds.size.y;
+                float scale = targetHeight / naturalHeight;
                 boy.transform.localScale = Vector3.one * scale;
                 bounds = ComputeRendererBounds(boy);
             }
+            Debug.Log($"[ChibiBoyPatcher] 身高诊断：实例化自然身高 {naturalHeight:F3}m → 目标 {targetHeight:F2}m → 缩放后实测 {ComputeRendererBounds(boy).size.y:F3}m");
             var center = bounds.center;
             boy.transform.position += new Vector3(
                 pivot.position.x - center.x,
