@@ -39,6 +39,8 @@ namespace RollABall
         public GameObject housePillarModel;     // 墙角柱（可选）
         public Material houseMaterial;          // 统一贴图材质（空 = 用模型自带材质）
         public bool buildHouseShell = true;     // 北/西/东三面墙；南侧留空只加隐形挡板
+        [Header("外围墙加高（封闭感：墙顶超出视野）")]
+        [System.NonSerialized] public float outerWallHeightScale = 27f; // 外围墙高度倍率：NonSerialized 防场景旧值覆盖（27 = 3×9，墙顶必然出画）
 
         [Header("切菜板工作站（cut 格，编辑器菜单 5 注入；缺模型时只生成底座）")]
         public GameObject cutBoardModel;        // 菜板
@@ -396,8 +398,9 @@ namespace RollABall
             float runLength = Mathf.Max(wallBounds.size.x, wallBounds.size.z);
             float scale = map.cellSize / Mathf.Max(runLength, 1e-4f);
             bool runsAlongX = wallBounds.size.x >= wallBounds.size.z;   // 模型自身的走向轴
-            float wallTop = Mathf.Max(wallBounds.size.y * scale, 1f);
-            float baseY = -wallBounds.min.y * scale;                    // 模型轴心不在脚底时贴地校正
+            float heightScale = Mathf.Max(1f, outerWallHeightScale);    // 外围墙加高倍率
+            float wallTop = Mathf.Max(wallBounds.size.y * scale * heightScale, 1f);
+            float baseY = -wallBounds.min.y * scale * heightScale;      // 模型轴心不在脚底时贴地校正（Y 拉伸同步放大）
 
             float westX = map.CellToWorld(0, 0).x - map.cellSize * 0.5f;
             float eastX = map.CellToWorld(0, map.cols - 1).x + map.cellSize * 0.5f;
@@ -407,21 +410,21 @@ namespace RollABall
             // 北墙：一整排
             for (int c = 0; c < map.cols; c++)
                 PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
-                    new Vector3(map.CellToWorld(0, c).x, baseY, northZ), runsAlongX ? 0f : 90f, scale, $"North_{c}");
+                    new Vector3(map.CellToWorld(0, c).x, baseY, northZ), runsAlongX ? 0f : 90f, scale, heightScale, $"North_{c}");
             // 西墙 / 东墙：两列
             for (int r = 0; r < map.rows; r++)
             {
                 float yaw = runsAlongX ? 90f : 0f;
                 PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
-                    new Vector3(westX, baseY, map.CellToWorld(r, 0).z), yaw, scale, $"West_{r}");
+                    new Vector3(westX, baseY, map.CellToWorld(r, 0).z), yaw, scale, heightScale, $"West_{r}");
                 PlaceWallSegment(shell.transform, houseWallModel, houseMaterial,
-                    new Vector3(eastX, baseY, map.CellToWorld(r, 0).z), yaw, scale, $"East_{r}");
+                    new Vector3(eastX, baseY, map.CellToWorld(r, 0).z), yaw, scale, heightScale, $"East_{r}");
             }
-            // 四角柱（南侧两根只为收边好看）
+            // 四角柱（南侧两根只为收边好看；随墙加高变通天柱）
             if (housePillarModel != null)
             {
                 Bounds pillarBounds = ComputeLocalBounds(housePillarModel);
-                float pillarBaseY = -pillarBounds.min.y * scale;
+                float pillarBaseY = -pillarBounds.min.y * scale * heightScale;
                 Vector3[] corners =
                 {
                     new Vector3(westX, pillarBaseY, northZ),
@@ -430,7 +433,7 @@ namespace RollABall
                     new Vector3(eastX, pillarBaseY, southZ),
                 };
                 for (int i = 0; i < corners.Length; i++)
-                    PlaceWallSegment(shell.transform, housePillarModel, houseMaterial, corners[i], 0f, scale, $"Pillar_{i}");
+                    PlaceWallSegment(shell.transform, housePillarModel, houseMaterial, corners[i], 0f, scale, heightScale, $"Pillar_{i}");
             }
 
             // 碰撞：三条整墙 + 南侧隐形挡板（各自一个盒子，比逐段加省且稳定）
@@ -447,14 +450,14 @@ namespace RollABall
         }
 
         private void PlaceWallSegment(Transform parent, GameObject model, Material material,
-            Vector3 position, float yaw, float scale, string name)
+            Vector3 position, float yaw, float scale, float heightScale, string name)
         {
             var seg = Instantiate(model, parent);
             seg.name = name;
             seg.isStatic = true;
             seg.transform.localPosition = position;
             seg.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
-            seg.transform.localScale = Vector3.one * scale;
+            seg.transform.localScale = new Vector3(scale, scale * heightScale, scale);   // Y 拉高形成封闭感
             if (material != null)
                 foreach (var rend in seg.GetComponentsInChildren<Renderer>())
                     rend.sharedMaterial = material;   // 整包共用一张色板图，单材质即可
