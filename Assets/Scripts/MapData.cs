@@ -20,7 +20,7 @@ namespace RollABall
     {
         public int rows;
         public int cols;
-        public float cellSize = 2f;          // 每格边长（世界单位）
+        public float cellSize = 2f;          // 每格边长（世界单位；由地图 txt 的 cell_size 字段注入，缺省 2）
         [TextArea(3, 12)] public string[] gridRows;   // 每个元素 = 一行，token 间空格分隔
 
         [Header("木箱图例（数组按下标一一对应）")]

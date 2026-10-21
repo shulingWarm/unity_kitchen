@@ -32,7 +32,7 @@ namespace RollABall
 
         public float wallHeight = 1f;
         public float pickupScale = 0.6f;
-        public float boxSize = 1.6f;    // 木箱底面边长（高度=wallHeight，与内墙一致）；格子 2.0 留 0.4 缝，碰撞用箱子自身即可
+        public float boxFootprintRatio = 0.8f;   // 木箱底面边长 = cellSize × 此比例（高度=wallHeight）；1.2m 格子留 20% 缝隙
 
         [Header("房屋外壳（KayKit 模型，编辑器菜单 5 注入；缺模型时自动跳过）")]
         public GameObject houseWallModel;       // 直墙段
@@ -183,7 +183,8 @@ namespace RollABall
             var box = GameObject.CreatePrimitive(PrimitiveType.Cube);
             box.name = $"Box_{token}_{r}_{c}";
             box.transform.SetParent(parent, false);
-            box.transform.localScale = new Vector3(boxSize, wallHeight, boxSize);   // 高度与内墙一致
+            float footprint = map.cellSize * boxFootprintRatio;
+            box.transform.localScale = new Vector3(footprint, wallHeight, footprint);   // 高度与内墙一致
             box.transform.position = map.CellToWorld(r, c) + Vector3.up * (wallHeight * 0.5f);
             box.GetComponent<Renderer>().sharedMaterial =
                 map.blockSideMaterial != null ? map.blockSideMaterial : wallMaterial;

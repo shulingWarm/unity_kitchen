@@ -990,7 +990,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 635236de2dbfb1543b5e4b296dd38907, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RollABall.PlayerController
-  moveSpeed: 6
+  moveSpeed: 4.2
   followCamera: {fileID: 1069561428}
   animator: {fileID: 1431897048}
   modelPivot: {fileID: 1283969372}

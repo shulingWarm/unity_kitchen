@@ -15,7 +15,8 @@ namespace RollABallEditorTools
     /// 图例区（均在网格行之后，空行随意）：
     ///   「wN:」小节 → image:/model:/object: 三个标签字段（顶图、取出物品 fbx、object.json 物品 id）；
     ///   「tasks:」小节 → 每个任务一个小节「物品id:」+ time:/success:/fail:（限时秒、完成加分、超时扣分）；
-    ///   顶层字段 → task_num:（驻留卡数）、goal:（胜利分数）、total_time:（总时长秒）。
+    ///   顶层字段 → task_num:（驻留卡数）、goal:（胜利分数）、total_time:（总时长秒）、
+    ///   cell_size:（格子边长米，可选，缺省 2）。
     /// 同时把 Assets/GameInfo/object.json 烘焙成 ItemRegistry.asset（id → 图标），
     /// 把全部地图按文件名排序烘焙成 LevelRegistry.asset（关卡顺序）；
     /// 图例里的 object:/tasks: 的 id 必须都登记在内。模型缺贴图时的兜底材质
@@ -31,7 +32,7 @@ namespace RollABallEditorTools
         private const string LevelRegistryAssetPath = "Assets/GameInfo/LevelRegistry.asset";
 
         /// <summary>图例区允许的顶层标签字段（其他小节字段行遇到它们即停止收集）。</summary>
-        private static readonly string[] TopLevelFields = { "task_num", "goal", "total_time" };
+        private static readonly string[] TopLevelFields = { "task_num", "goal", "total_time", "cell_size" };
 
         private static readonly Regex BoxToken = new Regex(@"^w\d+$");
         private static readonly Regex SectionLine = new Regex(@"^\s*(\w+)\s*:\s*$");   // 小节头：wN: / tasks: / 任务id:
@@ -216,6 +217,7 @@ namespace RollABallEditorTools
             int taskNum = -1;
             int goal = -1;
             float totalTime = -1f;
+            float cellSize = 2f;   // 可选字段，缺省沿用 2 米
 
             // 所有木箱共用的侧面材质（纯色木棕）
             Material sideMat = GetOrCreatePlainMaterial($"{AssetFolder}/BoxSide.mat", new Color(0.55f, 0.36f, 0.20f));
@@ -334,6 +336,11 @@ namespace RollABallEditorTools
                         if (!int.TryParse(value, out goal) || goal <= 0)
                             throw new System.Exception($"goal 必须是正整数，读到 '{value}'");
                     }
+                    else if (key == "cell_size")
+                    {
+                        if (!float.TryParse(value, out cellSize) || cellSize <= 0f)
+                            throw new System.Exception($"cell_size 必须是正数（每格边长，单位米），读到 '{value}'");
+                    }
                     else // total_time
                     {
                         if (!float.TryParse(value, out totalTime) || totalTime <= 0f)
@@ -370,6 +377,7 @@ namespace RollABallEditorTools
             asset.taskNum = taskNum;
             asset.goal = goal;
             asset.totalTime = totalTime;
+            asset.cellSize = cellSize;
             return asset;
         }
 
@@ -575,6 +583,7 @@ namespace RollABallEditorTools
                 existing.taskNum = parsed.taskNum;
                 existing.goal = parsed.goal;
                 existing.totalTime = parsed.totalTime;
+                existing.cellSize = parsed.cellSize;
                 EditorUtility.SetDirty(existing);
             }
             else

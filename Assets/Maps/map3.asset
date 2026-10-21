@@ -14,7 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::RollABall.MapData
   rows: 20
   cols: 20
-  cellSize: 2
+  cellSize: 1.2
   gridRows:
   - 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
   - 1 1 1 1 1 w1 0 0 0 1 1 0 0 0 w2 1 1 1 1 1

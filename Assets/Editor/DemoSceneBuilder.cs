@@ -83,7 +83,7 @@ namespace RollABallEditorTools
             // ---- 玩家脚本引用 ----
             var pc = player.GetComponent<PlayerController>();
             pc.followCamera = camGO.GetComponent<Camera>();
-            pc.moveSpeed = 6f;
+            pc.moveSpeed = 4.2f;   // 3.5 格/秒 × 1.2m 格子
             pc.animator = botAnimator;
             pc.modelPivot = modelPivot.transform;
             if (botAnimator != null)

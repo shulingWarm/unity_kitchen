@@ -16,7 +16,7 @@ namespace RollABall
     [RequireComponent(typeof(Rigidbody))]
     public class PlayerController : MonoBehaviour
     {
-        public float moveSpeed = 6f;
+        public float moveSpeed = 4.2f;    // 移动速度（米/秒）：3.5 格/秒 × 1.2m 格子
         public Camera followCamera;       // 用于把摇杆方向换算成世界方向
         public Animator animator;         // 场景生成器注入（挂在模型实例上；猫咪模型时为 null）
         public Transform modelPivot;      // 模型父节点：只负责朝向，物理根不旋转
