@@ -20,6 +20,14 @@ namespace RollABall
 
         private GameObject _menuPanel;
         private GameObject _levelPanel;
+        private GameObject _characterPanel;
+        private CharacterPreviewStage _previewStage;
+
+        [Tooltip("候选形象（菜单 12 注入）：顺序对应预览台三个按钮")]
+        public GameObject[] characterPrefabs;
+        [Tooltip("候选形象贴图（菜单 12 注入）")]
+        public Texture2D chibiTexture;
+        public Texture2D catTexture;
 
         private static readonly Color BgColor = new Color(0.12f, 0.15f, 0.20f, 1f);
         private static readonly Color TitleColor = new Color(0.95f, 0.85f, 0.55f);
@@ -28,6 +36,7 @@ namespace RollABall
         private static readonly Color QuitColor = new Color(0.60f, 0.28f, 0.25f);
         private static readonly Color LevelColor = new Color(0.25f, 0.45f, 0.65f);
         private static readonly Color BackColor = new Color(0.45f, 0.47f, 0.50f);
+        private static readonly Color SelectColor = new Color(0.25f, 0.45f, 0.75f);   // 选择角色（蓝）
 
         private void Start()
         {
@@ -42,6 +51,63 @@ namespace RollABall
         {
             _menuPanel.SetActive(true);
             _levelPanel.SetActive(false);
+            if (_characterPanel != null) _characterPanel.SetActive(false);
+            if (_previewStage != null) _previewStage.SetVisible(false);
+        }
+
+        private void ShowCharacterSelect()
+        {
+            _menuPanel.SetActive(false);
+            if (_characterPanel != null) Destroy(_characterPanel);
+            BuildCharacterPanel();
+            _characterPanel.SetActive(true);
+            if (_previewStage != null) _previewStage.SetVisible(true);
+        }
+
+        // 角色列表：三个人形形象各自独占方形展位（独立拖拽旋转），下方按钮选择
+        private void BuildCharacterPanel()
+        {
+            var canvas = FindFirstObjectByType<Canvas>();
+            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            _characterPanel = BuildPanel("CharacterPanel", canvas);
+
+            Text title = CreateText(_characterPanel.transform, "Title", "选择角色", font, 52, FontStyle.Bold, TextColor);
+            SetRect((RectTransform)title.transform,
+                new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
+                new Vector2(600f, 80f), new Vector2(0f, -45f));
+
+            // 三个方形展位横排（独立相机渲染 + 独立拖拽旋转）
+            if (_previewStage == null)
+            {
+                var stageGO = new GameObject("CharacterPreviewStage");
+                _previewStage = stageGO.AddComponent<CharacterPreviewStage>();
+                _previewStage.prefabs = characterPrefabs;
+                _previewStage.chibiTexture = chibiTexture;
+                _previewStage.catTexture = catTexture;
+            }
+            var raws = _previewStage.BuildCells(_characterPanel.transform, new Vector2(380f, 380f));
+            float[] xs = { -425f, 0f, 425f };
+            for (int i = 0; i < raws.Length && i < 3; i++)
+                SetRect((RectTransform)raws[i].transform,
+                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                    new Vector2(380f, 380f), new Vector2(xs[i], -45f));
+
+            // 选择按钮对齐各展位下方（当前项打勾）
+            string current = CharacterSelection.Get();
+            AddCharacterButton(font, "豆豆男孩", CharacterSelection.ChibiBoy, current, new Vector2(-425f, -322f));
+            AddCharacterButton(font, "小猫", CharacterSelection.Cat, current, new Vector2(0f, -322f));
+            AddCharacterButton(font, "默认模型", CharacterSelection.Default, current, new Vector2(425f, -322f));
+
+            AddButton(_characterPanel.transform, font, "返回主菜单", BackColor, new Vector2(500f, 310f), ShowMenu);
+        }
+
+        private void AddCharacterButton(Font font, string label, string id, string current, Vector2 position)
+        {
+            bool selected = current == id;
+            string text = selected ? $"{label}（当前）" : label;
+            AddButton(_characterPanel.transform, font, text,
+                selected ? StartColor : LevelColor, position,
+                () => { CharacterSelection.Set(id); ShowCharacterSelect(); });   // 重建面板刷新"当前"标记
         }
 
         private void ShowLevelSelect()
@@ -85,6 +151,7 @@ namespace RollABall
                 new Vector2(600f, 100f), Vector2.zero);
             AddButton(_menuPanel.transform, font, "开始游戏", StartColor, new Vector2(0f, 20f), ShowLevelSelect);
             AddButton(_menuPanel.transform, font, "关闭游戏", QuitColor, new Vector2(0f, -60f), QuitGame);
+            AddButton(_menuPanel.transform, font, "选择角色", SelectColor, new Vector2(0f, -140f), ShowCharacterSelect);
 
             _levelPanel = BuildPanel("LevelPanel", canvas);
             Text levelTitle = CreateText(_levelPanel.transform, "Title", "选择关卡", font, 52, FontStyle.Bold, TextColor);

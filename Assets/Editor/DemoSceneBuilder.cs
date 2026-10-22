@@ -92,6 +92,10 @@ namespace RollABallEditorTools
                 botAnimator.applyRootMotion = false;   // Mixamo 动画带位移曲线，位置必须由物理根驱动
             }
 
+            // 角色选择：运行时按主菜单的选择替换外观（未选择时保留 X Bot）
+            var appearance = player.AddComponent<PlayerAppearance>();
+            CharacterAppearancePatcher.AssignReferences(appearance, pc);
+
             // 用豆豆男孩形象替换人形（最终定稿；保留物理根、朝向节点与抓取系统）
             ChibiBoyPatcher.ApplyChibiBoyToScene();
 
