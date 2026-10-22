@@ -26,6 +26,7 @@ namespace RollABall
         }
 
         private readonly List<Cell> _cells = new();
+        private Light _light;                    // 整个预览台一盏；不回收会越叠越亮
 
         /// <summary>搭建展位，返回每个展位的 RawImage（供 UI 横排布局）。</summary>
         public RawImage[] BuildCells(Transform uiParent, Vector2 cellSize)
@@ -50,13 +51,16 @@ namespace RollABall
                 cam.transform.position = new Vector3(originX, 0.9f, -2.6f);
                 cam.transform.rotation = Quaternion.Euler(5f, 0f, 0f);
 
-                // 灯光
-                var lightGO = new GameObject($"PreviewLight_{i}", typeof(Light));
-                lightGO.transform.SetParent(transform, false);
-                var light = lightGO.GetComponent<Light>();
-                light.type = LightType.Directional;
-                light.intensity = 1.1f;
-                lightGO.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+                // 灯光（整个预览台一盏；反复开关面板不再叠加变亮）
+                if (_light == null)
+                {
+                    var lightGO = new GameObject("PreviewLight", typeof(Light));
+                    lightGO.transform.SetParent(transform, false);
+                    _light = lightGO.GetComponent<Light>();
+                    _light.type = LightType.Directional;
+                    _light.intensity = 1.1f;
+                    _light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+                }
 
                 // 模型（归一化高度、朝向相机、脚底贴 y=0、居中于本展位）
                 var model = Instantiate(prefabs[i], transform);
@@ -104,6 +108,7 @@ namespace RollABall
 
         private void ClearCells()
         {
+            if (_light != null) Destroy(_light.gameObject);   // 灯光一并回收，防止叠加变亮
             foreach (var c in _cells)
             {
                 if (c.cam != null) Destroy(c.cam.gameObject);
