@@ -118,6 +118,8 @@ namespace RollABallEditorTools
             loader.servingTopMaterial = matServingTop;
             loader.servingSideMaterial = matServingSide;
             player.GetComponent<PlayerController>().mapLoader = loader;   // 抓取时查木箱列表
+            player.GetComponent<PlayerController>().itemRegistry =
+                AssetDatabase.LoadAssetAtPath<ItemRegistry>(TaskCardsScenePatcher.RegistryPath);   // 切配配方查询（菜单 3 已烘焙）
 
             // ---- UI ----
             BuildUI(player, loader);

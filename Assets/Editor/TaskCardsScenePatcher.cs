@@ -16,7 +16,7 @@ namespace RollABallEditorTools
     public static class TaskCardsScenePatcher
     {
         private const string ScenePath = "Assets/Scenes/DemoScene.unity";
-        private const string RegistryPath = "Assets/GameInfo/ItemRegistry.asset";
+        public const string RegistryPath = "Assets/GameInfo/ItemRegistry.asset";
         private const string LevelRegistryPath = "Assets/GameInfo/LevelRegistry.asset";
         private const string HouseFolder = "Assets/House/RestaurantBits";
         private const string ThrowIconPath = "Assets/UI/button_icon/throw.png";
@@ -51,6 +51,12 @@ namespace RollABallEditorTools
             // 投掷按钮（已存在时只重新注入引用）
             var canvas = Object.FindFirstObjectByType<Canvas>();
             var pc = loader.player != null ? loader.player.GetComponent<PlayerController>() : null;
+            if (pc != null)
+            {
+                pc.itemRegistry = AssetDatabase.LoadAssetAtPath<ItemRegistry>(RegistryPath);
+                if (pc.itemRegistry == null)
+                    Debug.LogWarning($"[TaskCardsScenePatcher] 未找到 {RegistryPath}，切菜交互不可用（先跑菜单 3 导入地图）");
+            }
             if (canvas != null && pc != null)
             {
                 CreateThrowButton(canvas, pc);

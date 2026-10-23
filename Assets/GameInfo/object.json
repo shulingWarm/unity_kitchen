@@ -4,5 +4,10 @@
   },
   "tomato": {
     "image": "cube_images/tomato.png"
+  },
+  "tomato_slice": {
+    "image": "cube_images/tomato.png",
+    "model": "cube_images/tomato-slice.fbx",
+    "cut_from": "tomato"
   }
 }

@@ -11,6 +11,7 @@ namespace RollABall
     /// → 否则原地放下（物理自由落体）。
     /// 空手 → 先捡起近处地面物品（WorldItem），没有才从最近的木箱拿对应食材模型。
     /// 投掷（独立按钮）：沿玩家朝向把手中物品抛物线抛出，落地后成为可再拾取的地面物品。
+    /// 交互（独立按钮）：面朝切菜板且有可切物品时，瞬时切成注册表里的切配产物。
     /// 手持物品统一挂在胸口骨骼上、双手 IK 捧住。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
@@ -31,6 +32,9 @@ namespace RollABall
         public float grabRange = 3f;      // 距离箱子/出餐口多远以内可以交互
         public float pickupRange = 1.5f;  // 拾取地面物品的距离（要贴近才捡）
         public float itemRadius = 0.18f;  // 手持物品目标半径：模型最大边长归一化到 itemRadius*2，IK 抓握距离也按它算
+
+        [Header("交互")]
+        public ItemRegistry itemRegistry; // 物品注册表（切配配方查询；场景补丁注入）
 
         [Header("投掷")]
         public float throwForwardSpeed = 5f;   // 水平初速（决定远近）
@@ -263,6 +267,81 @@ namespace RollABall
                 if (dxz <= best) { best = dxz; nearest = station; }
             }
             return nearest;
+        }
+
+        // ---------------- 交互（切菜板） ----------------
+
+        /// <summary>
+        /// 交互按钮回调：面朝切菜板且板上有可切物品时，瞬时切成注册的切配产物（无切菜动作）。
+        /// 产物是全新物品（如 tomato → tomato_slice）：之后拾起/放置/交付都按新 id 走，
+        /// 任务池不受影响（要求 tomato 的任务卡不认切片，交付即白交）。
+        /// </summary>
+        public void TryInteract()
+        {
+            if (mapLoader == null || itemRegistry == null) return;
+
+            // 面朝格子必须是切菜板（复用放置的同款面朝判定）
+            if (!mapLoader.TryGetPlaceSurface(transform.position, FacingDir(), out _, out string surfaceKey)) return;
+            if (!mapLoader.IsCutSurface(surfaceKey)) return;
+
+            WorldItem target = FindPlacedItem(surfaceKey);
+            if (target == null) { Debug.Log("[Player] 面前切菜板上没有物品"); return; }
+
+            string fromId = target.objectId;
+            if (!itemRegistry.TryGetCutResult(fromId, out string toId, out GameObject model))
+            {
+                Debug.Log($"[Player] {fromId} 不可切（注册表无切配配方）");
+                return;
+            }
+
+            CutPlacedItem(target, fromId, toId, model, surfaceKey);
+        }
+
+        /// <summary>找占用某台面的物品（WorldItem.All 登记，一台一物）。</summary>
+        private static WorldItem FindPlacedItem(string surfaceKey)
+        {
+            foreach (var item in WorldItem.All)
+                if (item != null && item.surfaceKey == surfaceKey) return item;
+            return null;
+        }
+
+        /// <summary>
+        /// 台面物品换成切配产物：新模型对齐到旧物品的底面中心（不陷入台面），
+        /// 尺寸/兜底材质与手持物同规；继承台面占用键，旧物品销毁。
+        /// </summary>
+        private void CutPlacedItem(WorldItem target, string fromId, string toId, GameObject model, string surfaceKey)
+        {
+            Bounds oldBounds = ComputeBounds(target.gameObject);
+            Material fallback = mapLoader.GetItemFallback(fromId);
+            Destroy(target.gameObject);
+
+            GameObject cut = model != null ? Instantiate(model) : CreateFallbackSphere();
+            cut.name = $"PlacedItem_{toId}";
+            foreach (var col in cut.GetComponentsInChildren<Collider>())
+                Object.Destroy(col);                            // 摆放物纯视觉，不带物理
+            FixMissingTextures(cut, fallback);
+            NormalizeSize(cut, itemRadius * 2f);
+            // 不强制转成 identity：切片是有朝向的扁平模型，保留 fbx 自带姿态（平放板面）
+
+            // 底面高度：旧物品底面（底座顶面）会被菜板盖住——扁切片会整个埋进菜板，
+            // 所以抬到菜板顶面，保证切片看得见、像是放在板面上。
+            float surfaceY = oldBounds.min.y;
+            if (mapLoader.TryGetCutSurfaceTop(surfaceKey, out float boardTop) && boardTop > surfaceY)
+                surfaceY = boardTop;
+
+            Bounds wb = ComputeBounds(cut);                     // 底面中心对齐台面
+            cut.transform.position += new Vector3(
+                oldBounds.center.x - wb.center.x,
+                surfaceY - wb.min.y,
+                oldBounds.center.z - wb.center.z);
+
+            var worldItem = cut.AddComponent<WorldItem>();
+            worldItem.objectId = toId;
+            worldItem.surfaceKey = surfaceKey;
+            Debug.Log($"[Player] 切配完成：{fromId} → {toId}" +
+                      $"（尺寸 {wb.size.x:F2}x{wb.size.y:F2}x{wb.size.z:F2}m，" +
+                      $"台面 y={surfaceY:F3}，位置 {cut.transform.position}，" +
+                      $"Renderer {cut.GetComponentsInChildren<Renderer>().Length} 个）");
         }
 
         // ---------------- 放置 / 拾取 ----------------

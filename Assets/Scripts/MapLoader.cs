@@ -60,6 +60,8 @@ namespace RollABall
         private Dictionary<string, GameObject> boxItemModels;
         private Dictionary<string, Material> boxItemFallbackMaterials;
         private Dictionary<string, string> boxObjectIds;
+        private Dictionary<string, Material> itemFallbackByObjectId;   // 物品 id → 兜底材质（反查）
+        private readonly Dictionary<string, float> cutSurfaceTops = new Dictionary<string, float>(); // 切菜板顶面世界高度
 
         private void Awake()
         {
@@ -115,6 +117,7 @@ namespace RollABall
             boxItemModels = new Dictionary<string, GameObject>();
             boxItemFallbackMaterials = new Dictionary<string, Material>();
             boxObjectIds = new Dictionary<string, string>();
+            itemFallbackByObjectId = new Dictionary<string, Material>();
             if (map.blockTypes == null) return;
 
             for (int i = 0; i < map.blockTypes.Length; i++)
@@ -127,9 +130,17 @@ namespace RollABall
                 if (map.blockItemMaterials != null && i < map.blockItemMaterials.Length)
                     boxItemFallbackMaterials[token] = map.blockItemMaterials[i];
                 if (map.blockObjectIds != null && i < map.blockObjectIds.Length)
+                {
                     boxObjectIds[token] = map.blockObjectIds[i];
+                    if (map.blockItemMaterials != null && i < map.blockItemMaterials.Length)
+                        itemFallbackByObjectId[map.blockObjectIds[i]] = map.blockItemMaterials[i];
+                }
             }
         }
+
+        /// <summary>物品 id → 模型缺贴图时的兜底材质（取自定义该物品的木箱图例；未登记返回 null）。</summary>
+        public Material GetItemFallback(string objectId)
+            => objectId != null && itemFallbackByObjectId.TryGetValue(objectId, out var mat) ? mat : null;
 
         private void BuildGround()
         {
@@ -274,6 +285,23 @@ namespace RollABall
 
         public string GetCellToken(int r, int c) => map.InRange(r, c) ? cells[r, c] : "1";
 
+        /// <summary>占用键（"r,c"）对应的格子是否为切菜板（交互切配只认它）。</summary>
+        public bool IsCutSurface(string surfaceKey)
+        {
+            if (surfaceKey == null) return false;
+            string[] rc = surfaceKey.Split(',');
+            return rc.Length == 2
+                && int.TryParse(rc[0], out int r) && int.TryParse(rc[1], out int c)
+                && GetCellToken(r, c) == "cut";
+        }
+
+        /// <summary>
+        /// 切菜板顶面世界高度（菜板模型叠在墙高底座之上，摆件底面对齐的是底座顶面，
+        /// 扁平的切片按那个高度会被埋进菜板，必须抬到板面）。
+        /// </summary>
+        public bool TryGetCutSurfaceTop(string surfaceKey, out float topY)
+            => cutSurfaceTops.TryGetValue(surfaceKey ?? "", out topY);
+
         /// <summary>
         /// 沿 facing 找 origin 面前的置物台格子（内墙/木箱/切菜板）。
         /// 命中返回台面顶面中心与占用键（格子坐标 r,c）；斜向朝向时先查主轴格，再查侧轴格。
@@ -333,6 +361,7 @@ namespace RollABall
             if (cutBoardModel == null)
             {
                 Debug.LogWarning($"[MapLoader] cut ({r},{c}) 缺少菜板模型，只生成底座（跑菜单 5 注入）");
+                cutSurfaceTops[$"{r},{c}"] = wallHeight;   // 无菜板：底座顶面就是台面
                 return;
             }
 
@@ -345,6 +374,7 @@ namespace RollABall
             float boardWidth = Mathf.Max(boardBounds.size.x, boardBounds.size.z);
             float scale = (map.cellSize * 0.7f) / Mathf.Max(boardWidth, 1e-4f);
             PlaceStationModel(board, topCenter, scale);
+            cutSurfaceTops[$"{r},{c}"] = ComputeWorldBounds(board).max.y;   // 切片摆放的真实台面高度
 
             // 刀：沿用菜板的缩放比例，平放板面中央（轻微下压避免悬空）
             if (cutKnifeModel != null)

@@ -421,7 +421,7 @@ namespace RollABallEditorTools
 
         // ---------------- 物品注册表 ----------------
 
-        /// <summary>把 object.json 烘焙成 ItemRegistry.asset（运行时按 id 查图标），返回全部物品 id。</summary>
+        /// <summary>把 object.json 烘焙成 ItemRegistry.asset（运行时按 id 查图标/切配配方），返回全部物品 id。</summary>
         private static HashSet<string> BakeItemRegistry()
         {
             if (!File.Exists(ObjectJsonPath))
@@ -447,8 +447,41 @@ namespace RollABallEditorTools
                 if (icons[i] == null)
                     throw new System.Exception($"object.json 物品 '{ids[i]}' 的图片不存在：{imagePath}");
             }
+
+            // 切配配方：带 cut_from 字段的条目是切配产物（自身 id），指向输入物品与产物模型
+            var allIds = new HashSet<string>(ids);
+            var cutFrom = new List<string>();
+            var cutTo = new List<string>();
+            var cutModels = new List<GameObject>();
+            foreach (var item in items)
+            {
+                if (!item.Value.TryGetValue("cut_from", out string fromId)) continue;
+                fromId = fromId.ToLowerInvariant();
+                if (!allIds.Contains(fromId))
+                    throw new System.Exception(
+                        $"object.json 物品 '{item.Key}' 的 cut_from '{fromId}' 没有在 object.json 里登记" +
+                        $"（现有：{string.Join(", ", allIds)}）");
+                if (cutFrom.Contains(fromId))
+                    throw new System.Exception($"object.json 里物品 '{fromId}' 定义了多个切配产物");
+
+                if (!item.Value.TryGetValue("model", out string modelRel))
+                    throw new System.Exception($"object.json 物品 '{item.Key}' 带 cut_from 但缺少 model 字段");
+                string modelPath = "Assets/" + modelRel.Replace('\\', '/');
+                var model = AssetDatabase.LoadAssetAtPath<GameObject>(modelPath);
+                if (model == null)
+                    throw new System.Exception(
+                        $"object.json 物品 '{item.Key}' 的模型不存在或尚未被 Unity 导入：{modelPath}");
+
+                cutFrom.Add(fromId);
+                cutTo.Add(item.Key);
+                cutModels.Add(model);
+            }
+
             registry.ids = ids;
             registry.icons = icons;
+            registry.cutFromIds = cutFrom.ToArray();
+            registry.cutToIds = cutTo.ToArray();
+            registry.cutToModels = cutModels.ToArray();
             EditorUtility.SetDirty(registry);
             return new HashSet<string>(ids);
         }
