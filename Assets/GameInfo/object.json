@@ -7,7 +7,7 @@
   },
   "tomato_slice": {
     "image": "cube_images/tomato.png",
-    "model": "cube_images/tomato-slice.fbx",
+    "model": "cube_images/tomato-slice.glb",
     "cut_from": "tomato"
   }
 }
