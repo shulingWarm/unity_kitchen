@@ -151,6 +151,7 @@ namespace RollABall
 
             // 切菜：按住交互键且面朝切菜板时累计物品上的进度
             UpdateChopping();
+            SfxPlayer.SetChopping(IsChopping);   // 驱动切菜节奏声（笃笃笃）
 
             // 动画：MoveSpeed 驱动站立/行走，IsCarry 驱动空手/捧物两个分支，IsChopping 驱动切菜
             if (animator != null)
@@ -267,6 +268,7 @@ namespace RollABall
 
             FixMissingTextures(heldItem, slot.fallbackMaterial);
             NormalizeSize(heldItem, itemRadius * 2f);           // 不管 fbx 原始多大，统一缩到手持尺寸
+            SfxPlayer.Play(SfxKey.Grab);
         }
 
         private Transform FindNearestServingStation()
@@ -384,6 +386,7 @@ namespace RollABall
             var worldItem = cut.AddComponent<WorldItem>();
             worldItem.objectId = toId;
             worldItem.surfaceKey = surfaceKey;
+            SfxPlayer.Play(SfxKey.ChopDone);
             Debug.Log($"[Player] 切配完成：{fromId} → {toId}" +
                       $"（尺寸 {wb.size.x:F2}x{wb.size.y:F2}x{wb.size.z:F2}m，" +
                       $"台面 y={surfaceY:F3}，位置 {cut.transform.position}，" +
@@ -416,6 +419,7 @@ namespace RollABall
             ReleaseHeldItem(position,
                 (forward + Vector3.up * 0.5f) * 1.2f,
                 new Vector3(Random.Range(-2f, 2f), Random.Range(-1f, 1f), Random.Range(-2f, 2f)));
+            SfxPlayer.Play(SfxKey.Place, 0.7f);   // 落地轻响（比摆上台面略轻）
         }
 
         /// <summary>
@@ -435,6 +439,7 @@ namespace RollABall
             ReleaseHeldItem(position,
                 forward * throwForwardSpeed + Vector3.up * throwUpSpeed,
                 new Vector3(Random.Range(-3f, 3f), Random.Range(-1f, 1f), Random.Range(-3f, 3f)));
+            SfxPlayer.Play(SfxKey.Throw);
         }
 
         /// <summary>把手中物品物理化释放：脱离骨骼、加包围盒碰撞体与刚体、登记为地面物品。</summary>
@@ -486,6 +491,7 @@ namespace RollABall
                                      + Vector3.up * 0.1f;
             item.transform.SetParent(chest, true);
             item.transform.localRotation = Quaternion.identity; // 恢复直立持握，和从箱子拿一致
+            SfxPlayer.Play(SfxKey.Grab);
         }
 
         /// <summary>所有子网格本地包围盒的粗略合并（放置时的物理近似，不做矩阵精确变换）。</summary>
@@ -516,6 +522,7 @@ namespace RollABall
 
             if (taskCards == null) taskCards = FindFirstObjectByType<TaskCardsUI>();
             bool served = taskCards != null && taskCards.TryServe(objectId);
+            SfxPlayer.Play(served ? SfxKey.ServeHit : SfxKey.ServeMiss);
             Debug.Log(served
                 ? $"[Player] 交付 {objectId}：任务完成"
                 : $"[Player] 交付 {objectId}：没有任务需要它，白交了");
@@ -557,6 +564,7 @@ namespace RollABall
             worldItem.objectId = objectId;
             worldItem.surfaceKey = surfaceKey;
             item.name = $"PlacedItem_{objectId}";
+            SfxPlayer.Play(SfxKey.Place);
         }
 
         /// <summary>图例缺模型时的兜底：原来的绿色小球。</summary>

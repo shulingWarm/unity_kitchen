@@ -21,6 +21,7 @@ namespace RollABall
         private Image _barFill;
         private float _remaining;
         private bool _finished;
+        private int _lastTickSecond = -1;   // 最后 10 秒每整秒滴答一声（去重用）
 
         private static readonly Color PanelColor = new Color(0.10f, 0.17f, 0.36f, 0.92f);
         private static readonly Color BarBackColor = new Color(0f, 0f, 0f, 0.55f);
@@ -40,6 +41,14 @@ namespace RollABall
 
             _remaining = Mathf.Max(0f, _remaining - Time.deltaTime);
             Refresh();
+
+            // 最后 10 秒：每进入一个新整秒滴答一声（TimeUp 时不再响，交给失败音）
+            int left = Mathf.CeilToInt(_remaining);
+            if (left > 0 && left <= 10 && left != _lastTickSecond)
+            {
+                _lastTickSecond = left;
+                SfxPlayer.Play(SfxKey.Tick, 0.9f);
+            }
 
             if (_remaining <= 0f)
             {

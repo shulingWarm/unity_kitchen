@@ -51,6 +51,7 @@ namespace RollABall
             if (_ended) return;
             _ended = true;
             Time.timeScale = 0f;   // 冻结计时/移动/任务卡
+            SfxPlayer.Play(SfxKey.Win);
             bool hasNext = levelRegistry != null && !levelRegistry.IsLast(LevelSelection.Index);
             ShowResult("胜利！", $"恭喜！达到 {mapLoader.map.goal} 分，本关通过！", TitleWinColor, restart: true, next: hasNext);
         }
@@ -60,6 +61,7 @@ namespace RollABall
             if (_ended) return;
             _ended = true;
             Time.timeScale = 0f;
+            SfxPlayer.Play(SfxKey.Lose);
             int goal = mapLoader != null && mapLoader.map != null ? mapLoader.map.goal : 0;
             ShowResult("失败", $"时间到！未达到目标 {goal} 分。", TitleLoseColor, restart: true, next: false);
         }

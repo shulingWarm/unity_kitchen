@@ -95,6 +95,7 @@ namespace RollABall
                     RemoveTask(t);      // 超时作废
                     DrawNewTask();      // 立刻补一张
                     if (_scoreUI != null) _scoreUI.Add(-t.def.fail);   // 超时扣分
+                    SfxPlayer.Play(SfxKey.TaskExpired, 0.8f);
                     anyExpired = true;
                 }
             }
