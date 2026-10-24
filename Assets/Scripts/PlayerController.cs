@@ -11,7 +11,8 @@ namespace RollABall
     /// → 否则原地放下（物理自由落体）。
     /// 空手 → 先捡起近处地面物品（WorldItem），没有才从最近的木箱拿对应食材模型。
     /// 投掷（独立按钮）：沿玩家朝向把手中物品抛物线抛出，落地后成为可再拾取的地面物品。
-    /// 交互（独立按钮）：面朝切菜板且有可切物品时，瞬时切成注册表里的切配产物。
+    /// 交互（独立按钮，按住）：空手面朝切菜板且有可切物品时播放切菜动画并累计进度，
+    /// 累计满 chopDuration 秒后换成注册表里的切配产物；进度记在物品上，可跨松手/拾取接续。
     /// 手持物品统一挂在胸口骨骼上、双手 IK 捧住。
     /// </summary>
     [RequireComponent(typeof(Rigidbody))]
@@ -35,6 +36,7 @@ namespace RollABall
 
         [Header("交互")]
         public ItemRegistry itemRegistry; // 物品注册表（切配配方查询；场景补丁注入）
+        public float chopDuration = 3f;   // 按住交互键累计该秒数后完成切配
 
         [Header("投掷")]
         public float throwForwardSpeed = 5f;   // 水平初速（决定远近）
@@ -44,6 +46,15 @@ namespace RollABall
         private GameObject heldItem;      // 手上的物品（挂在胸部骨骼上，null = 空手）
         private string heldObjectId;      // 手持物品的物品 id（object.json，交付时与任务卡匹配）
         private TaskCardsUI taskCards;    // 交付时延迟查找（场景重启后自动重找）
+
+        private bool interactHeld;        // 交互键是否按住（按钮按下/抬起设置）
+        private bool? hasChopParam;       // 动画状态机是否有 IsChopping 参数（切菜补丁执行过）
+
+        /// <summary>是否正在切菜（按住且条件满足）；交互按钮进度环据此显示。</summary>
+        public bool IsChopping { get; private set; }
+
+        /// <summary>当前按住切菜的进度 0~1（未在切菜时为 0）。</summary>
+        public float ChopProgress01 { get; private set; }
 
         private static Material itemMaterial;
 
@@ -138,11 +149,15 @@ namespace RollABall
                 modelPivot.rotation = Quaternion.Slerp(modelPivot.rotation, target, turnSpeed * Time.deltaTime);
             }
 
-            // 动画：MoveSpeed 驱动站立/行走，IsCarry 驱动空手/捧物两个分支
+            // 切菜：按住交互键且面朝切菜板时累计物品上的进度
+            UpdateChopping();
+
+            // 动画：MoveSpeed 驱动站立/行走，IsCarry 驱动空手/捧物两个分支，IsChopping 驱动切菜
             if (animator != null)
             {
                 animator.SetFloat("MoveSpeed", moving ? 1f : 0f, 0.1f, Time.deltaTime);
                 animator.SetBool("IsCarry", heldItem != null);
+                if (HasChopParameter()) animator.SetBool("IsChopping", IsChopping);
             }
         }
 
@@ -272,29 +287,60 @@ namespace RollABall
         // ---------------- 交互（切菜板） ----------------
 
         /// <summary>
-        /// 交互按钮回调：面朝切菜板且板上有可切物品时，瞬时切成注册的切配产物（无切菜动作）。
-        /// 产物是全新物品（如 tomato → tomato_slice）：之后拾起/放置/交付都按新 id 走，
-        /// 任务池不受影响（要求 tomato 的任务卡不认切片，交付即白交）。
+        /// 交互按钮按下/抬起：按住时每帧尝试切菜；松开只是暂停，进度保留在物品上。
         /// </summary>
-        public void TryInteract()
+        public void SetInteractHeld(bool held)
         {
-            if (mapLoader == null || itemRegistry == null) return;
+            interactHeld = held;
+            if (!held)
+            {
+                IsChopping = false;
+                ChopProgress01 = 0f;
+            }
+        }
+
+        /// <summary>
+        /// 每帧切菜判定：空手 + 面朝切菜板 + 板上物品有切配配方才累计进度。
+        /// 累计满 chopDuration 后原位换成切片；中途松开/离开/换物都只暂停，不丢进度。
+        /// </summary>
+        private void UpdateChopping()
+        {
+            IsChopping = false;
+            ChopProgress01 = 0f;
+
+            if (!interactHeld || heldItem != null || mapLoader == null || itemRegistry == null) return;
 
             // 面朝格子必须是切菜板（复用放置的同款面朝判定）
             if (!mapLoader.TryGetPlaceSurface(transform.position, FacingDir(), out _, out string surfaceKey)) return;
             if (!mapLoader.IsCutSurface(surfaceKey)) return;
 
             WorldItem target = FindPlacedItem(surfaceKey);
-            if (target == null) { Debug.Log("[Player] 面前切菜板上没有物品"); return; }
+            if (target == null) return;
+            if (!itemRegistry.TryGetCutResult(target.objectId, out string toId, out GameObject model)) return;
 
-            string fromId = target.objectId;
-            if (!itemRegistry.TryGetCutResult(fromId, out string toId, out GameObject model))
+            IsChopping = true;
+            var progress = target.GetComponent<CutProgress>();
+            if (progress == null) progress = target.gameObject.AddComponent<CutProgress>();
+            progress.seconds += Time.deltaTime;
+            ChopProgress01 = Mathf.Clamp01(progress.seconds / Mathf.Max(chopDuration, 0.01f));
+
+            if (progress.seconds >= chopDuration)
             {
-                Debug.Log($"[Player] {fromId} 不可切（注册表无切配配方）");
-                return;
+                CutPlacedItem(target, target.objectId, toId, model, surfaceKey);
+                IsChopping = false;
+                ChopProgress01 = 0f;
             }
+        }
 
-            CutPlacedItem(target, fromId, toId, model, surfaceKey);
+        /// <summary>动画状态机是否已经有切菜参数（跑过切菜动画补丁）。</summary>
+        private bool HasChopParameter()
+        {
+            if (hasChopParam.HasValue) return hasChopParam.Value;
+            if (animator == null) return false;   // 不缓存：animator 可能稍后才注入
+            foreach (var p in animator.parameters)
+                if (p.name == "IsChopping") { hasChopParam = true; return true; }
+            hasChopParam = false;
+            return false;
         }
 
         /// <summary>找占用某台面的物品（WorldItem.All 登记，一台一物）。</summary>

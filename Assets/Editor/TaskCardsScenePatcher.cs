@@ -135,12 +135,15 @@ namespace RollABallEditorTools
             if (existing != null)
             {
                 existing.player = player;
+                existing.progressRing = EnsureProgressRing(existing.gameObject);
                 return existing.gameObject;
             }
 
             var go = new GameObject("InteractButton",
                 typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button), typeof(InteractButton));
-            go.GetComponent<InteractButton>().player = player;
+            var interact = go.GetComponent<InteractButton>();
+            interact.player = player;
+            interact.progressRing = EnsureProgressRing(go);
             go.transform.SetParent(canvas.transform, false);
             var rt = (RectTransform)go.transform;
             rt.anchorMin = new Vector2(1f, 0f);
@@ -178,6 +181,36 @@ namespace RollABallEditorTools
                 Debug.LogWarning($"[TaskCardsScenePatcher] 找不到 {InteractIconPath}，交互按钮只有圆环");
             }
             return go;
+        }
+
+        /// <summary>
+        /// 给交互按钮补一个环形进度子物体（Radial360 填充，排在图标下层，初始隐藏）。
+        /// 已存在时只刷新配置，保证补丁可重复执行。
+        /// </summary>
+        private static Image EnsureProgressRing(GameObject buttonGO)
+        {
+            var existing = buttonGO.transform.Find("Progress");
+            var ring = existing != null ? existing.GetComponent<Image>() : null;
+            if (ring == null)
+            {
+                var go = new GameObject("Progress", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                go.transform.SetParent(buttonGO.transform, false);
+                go.transform.SetAsFirstSibling();   // 垫在图标下面
+                var rt = (RectTransform)go.transform;
+                rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta = new Vector2(150f, 150f);   // 与外圈圆环同尺寸
+                ring = go.GetComponent<Image>();
+                ring.type = Image.Type.Filled;
+                ring.fillMethod = Image.FillMethod.Radial360;
+                ring.fillOrigin = (int)Image.Origin360.Top;
+                ring.fillClockwise = true;
+                ring.raycastTarget = false;
+                ring.sprite = DemoSceneBuilder.GetOrCreateRingSprite();
+                ring.color = new Color(0.30f, 0.75f, 0.30f, 0.9f);
+            }
+            ring.fillAmount = 0f;
+            ring.gameObject.SetActive(false);
+            return ring;
         }
 
         /// <summary>

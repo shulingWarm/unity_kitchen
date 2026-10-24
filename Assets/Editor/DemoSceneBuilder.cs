@@ -18,6 +18,7 @@ namespace RollABallEditorTools
     public static class DemoSceneBuilder
     {
         private const string ScenePath = "Assets/Scenes/DemoScene.unity";
+        private const string ChopFbxPath = "Assets/Models/chop.fbx";
         private const string CircleSpritePath = "Assets/UI/joystick_circle.png";
 
         // ---------------- 菜单 1：构建场景 ----------------
@@ -423,9 +424,81 @@ namespace RollABallEditorTools
             RebuildTransition(walk, carryWalk, AnimatorConditionMode.If, 0f, "IsCarry", null);
             RebuildTransition(carryWalk, walk, AnimatorConditionMode.IfNot, 0f, "IsCarry", null);
 
+            // 切菜分支（chop.fbx 由菜单 11 配置；缺文件时跳过，不影响基础状态机）
+            EnsureChopState(ctrl);
+
             EditorUtility.SetDirty(ctrl);
             AssetDatabase.SaveAssets();
             return ctrl;
+        }
+
+        /// <summary>
+        /// 切菜分支：IsChopping 参数 + Chop 状态（chop.fbx，循环）+ 进出转换。
+        /// 幂等，菜单 1 重建状态机与切菜动画补丁都会调用。
+        /// AnyState→Chop 保证按住切菜的优先级高于移动/持物分支。
+        /// </summary>
+        public static void EnsureChopState(AnimatorController ctrl)
+        {
+            if (ctrl == null || ctrl.layers.Length == 0) return;
+
+            if (!HasParameter(ctrl, "IsChopping"))
+                ctrl.AddParameter("IsChopping", AnimatorControllerParameterType.Bool);
+
+            var clip = LoadClipFromFbx(ChopFbxPath);
+            if (clip == null) return;   // 缺 fbx 时不建空状态（LoadClipFromFbx 已告警）
+
+            var root = ctrl.layers[0].stateMachine;
+            var chop = EnsureState(root, "Chop", clip);
+            var idle = FindState(root, "Idle");
+            var walk = FindState(root, "Walk");
+
+            RebuildAnyStateTransition(root, chop, "IsChopping");
+
+            // 松开后（IsChopping=false）按是否移动回到 Idle / Walk
+            if (idle != null) RebuildChopExit(chop, idle, AnimatorConditionMode.Less, 0.1f);
+            if (walk != null) RebuildChopExit(chop, walk, AnimatorConditionMode.Greater, 0.1f);
+
+            EditorUtility.SetDirty(ctrl);
+        }
+
+        private static AnimatorState FindState(AnimatorStateMachine sm, string name)
+        {
+            foreach (var s in sm.states)
+                if (s.state.name == name) return s.state;
+            return null;
+        }
+
+        /// <summary>重建 AnyState→to 的转换（先删同目标旧转换，保证幂等）。</summary>
+        private static void RebuildAnyStateTransition(AnimatorStateMachine sm, AnimatorState to, string param)
+        {
+            for (int i = sm.anyStateTransitions.Length - 1; i >= 0; i--)
+            {
+                var t = sm.anyStateTransitions[i];
+                if (t.destinationState == to) sm.RemoveAnyStateTransition(t);
+            }
+
+            var nt = sm.AddAnyStateTransition(to);
+            nt.canTransitionToSelf = false;
+            nt.hasExitTime = false;
+            nt.duration = 0.15f;
+            nt.AddCondition(AnimatorConditionMode.If, 0f, param);
+        }
+
+        /// <summary>切菜退出：IsChopping 为假且移动状态满足条件时切到目标状态。</summary>
+        private static void RebuildChopExit(AnimatorState from, AnimatorState to,
+            AnimatorConditionMode moveMode, float threshold)
+        {
+            for (int i = from.transitions.Length - 1; i >= 0; i--)
+            {
+                var t = from.transitions[i];
+                if (t.destinationState == to) from.RemoveTransition(t);
+            }
+
+            var nt = from.AddTransition(to);
+            nt.hasExitTime = false;
+            nt.duration = 0.15f;
+            nt.AddCondition(AnimatorConditionMode.IfNot, 0f, "IsChopping");
+            nt.AddCondition(moveMode, threshold, "MoveSpeed");
         }
 
         private static bool HasParameter(AnimatorController ctrl, string name)
