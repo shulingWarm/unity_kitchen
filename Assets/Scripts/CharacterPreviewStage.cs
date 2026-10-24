@@ -79,8 +79,8 @@ namespace RollABall
                     }
                     model.transform.position += new Vector3(originX - b.center.x, -b.min.y, -b.center.z);
 
-                    // 贴图接线：按形象铺 basecolor（默认模型用自带材质）
-                    Texture2D tex = i == 0 ? chibiTexture : i == 1 ? catTexture : null;
+                    // 贴图接线：豆豆男孩需要补 basecolor；小猫（OBJ）自带 MTL 贴图；默认模型用原生材质
+                    Texture2D tex = i == 0 ? chibiTexture : null;
                     if (tex != null)
                     {
                         var mat = new Material(Shader.Find("Standard")) { mainTexture = tex };

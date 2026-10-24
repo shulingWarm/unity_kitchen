@@ -56,13 +56,9 @@ namespace RollABall
             var model = Instantiate(prefab, modelPivot);
             model.name = prefab.name;
 
-            // Animator 可能在根或子节点：用 GetComponentInChildren 找，找不到要报错
+            // Animator 可能在根或子节点：用 GetComponentInChildren 找
             var anim = model.GetComponentInChildren<Animator>();
-            if (anim == null)
-            {
-                Debug.LogError($"[PlayerAppearance] {id} 模型里没有 Animator，无法绑定动作");
-            }
-            else
+            if (anim != null)
             {
                 anim.runtimeAnimatorController = controller;
                 anim.applyRootMotion = false;
@@ -76,14 +72,18 @@ namespace RollABall
                 }
                 Debug.Log($"[PlayerAppearance] 角色形象已切换为 {id}，动画已绑定");
             }
-
-            // 贴图接线：FBX 自带材质在运行时实例可能没有贴图，按形象补 basecolor
-            Texture2D tex = id == CharacterSelection.ChibiBoy ? chibiTexture
-                          : id == CharacterSelection.Cat ? catTexture
-                          : null;
-            if (tex != null)
+            else
             {
-                var mat = new Material(Shader.Find("Standard")) { mainTexture = tex };
+                // 静态模型（无骨骼，如 GLB 转换的猫咪）：程序化小跳动画 + 嘴部锚点叼球
+                model.AddComponent<CatPlayerModel>();
+                if (player != null) player.animator = null;
+                Debug.Log($"[PlayerAppearance] 角色形象已切换为 {id}（静态模型：程序化动画）");
+            }
+
+            // 贴图接线：仅豆豆男孩需要（小猫 GLB/OBJ 自带 MTL 贴图，X Bot 用原生材质）
+            if (id == CharacterSelection.ChibiBoy && chibiTexture != null)
+            {
+                var mat = new Material(Shader.Find("Standard")) { mainTexture = chibiTexture };
                 foreach (var r in model.GetComponentsInChildren<Renderer>())
                     r.sharedMaterial = mat;
             }
@@ -106,6 +106,17 @@ namespace RollABall
                     modelPivot.position.x - center.x,
                     modelPivot.position.y - b.min.y,
                     modelPivot.position.z - center.z);
+            }
+
+            // 静态模型：嘴部锚点（叼球用）
+            if (anim == null && renderers2.Length > 0)
+            {
+                var tb = renderers2[0].bounds;
+                for (int i = 1; i < renderers2.Length; i++) tb.Encapsulate(renderers2[i].bounds);
+                var mouth = new GameObject("Mouth");
+                mouth.transform.SetParent(model.transform, true);
+                mouth.transform.position = new Vector3(tb.center.x, tb.min.y + tb.size.y * 0.72f, tb.max.z + 0.03f);
+                if (player != null) player.mouthAnchor = mouth.transform;
             }
         }
     }

@@ -1152,11 +1152,11 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: cfb876d72c19f0848b6aad26c9c47994, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::RollABall.PlayerAppearance
   defaultPrefab: {fileID: 919132149155446097, guid: be0181b306f905f4ca1d89beb2e9320e, type: 3}
   chibiPrefab: {fileID: 919132149155446097, guid: 43e312a87a21e1c418f4af959af5ad3b, type: 3}
-  catPrefab: {fileID: 919132149155446097, guid: 43e2fbc4d241a0c4f8f44533053fe2ed, type: 3}
+  catPrefab: {fileID: 4814140183114437194, guid: 6964a1e1d282a9044aa32e77db68dd20, type: 3}
   chibiTexture: {fileID: 2800000, guid: a0025c7ba18df254190da27905386f5b, type: 3}
   catTexture: {fileID: 2800000, guid: 9d9de1223de4ef44d842af89a90e2b65, type: 3}
   controller: {fileID: 9100000, guid: f8000168e6b13fe4293cb1b2c76f3ef7, type: 2}
