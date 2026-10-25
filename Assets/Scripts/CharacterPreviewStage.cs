@@ -15,8 +15,12 @@ namespace RollABall
         public Color backgroundColor = new Color(0.07f, 0.09f, 0.13f);
         public float modelHeight = 1.5f;         // 展示高度（米）
         public Texture2D chibiTexture;           // 豆豆男孩 basecolor
-        public Texture2D catTexture;             // 小猫 basecolor
+        public Texture2D catTexture;             // 小猫 basecolor（保留兼容）
         public Material catMaterial;             // 小猫成品材质（条纹贴图）
+        [Tooltip("按展位索引的成品材质：null = 用 prefab 原生材质")]
+        public Material[] cellMaterials;
+        [Tooltip("按展位索引的朝向（度）：模型原生面朝方向不同，需要单独校正")]
+        public float[] cellYaw;
 
         private class Cell
         {
@@ -66,7 +70,7 @@ namespace RollABall
                 // 模型（归一化高度、朝向相机、脚底贴 y=0、居中于本展位）
                 var model = Instantiate(prefabs[i], transform);
                 model.name = $"PreviewModel_{i}";
-                float yaw = i == 1 ? 0f : 180f;   // 绑骨猫(i=1)原生面向镜头，其余 Mixamo 模型需转 180°
+                float yaw = (cellYaw != null && i < cellYaw.Length) ? cellYaw[i] : 180f;
                 model.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 var renderers = model.GetComponentsInChildren<Renderer>();
                 if (renderers.Length > 0)
@@ -81,16 +85,14 @@ namespace RollABall
                     }
                     model.transform.position += new Vector3(originX - b.center.x, -b.min.y, -b.center.z);
 
-                    // 材质接线：豆豆男孩补 basecolor；小猫套成品材质（prefab 原生材质无贴图）；默认模型用原生材质
-                    if (i == 0 && chibiTexture != null)
-                    {
-                        var mat = new Material(Shader.Find("Standard")) { mainTexture = chibiTexture };
+                    // 材质接线：优先用按索引配置的成品材质，否则用原生材质
+                    Material mat = (cellMaterials != null && i < cellMaterials.Length) ? cellMaterials[i] : null;
+                    if (mat == null && i == 0 && chibiTexture != null)                        // 豆豆男孩兼容
+                        mat = new Material(Shader.Find("Standard")) { mainTexture = chibiTexture };
+                    else if (mat == null && i == 1 && catMaterial != null)                    // 小猫兼容
+                        mat = catMaterial;
+                    if (mat != null)
                         foreach (var r in renderers) r.sharedMaterial = mat;
-                    }
-                    else if (i == 1 && catMaterial != null)
-                    {
-                        foreach (var r in renderers) r.sharedMaterial = catMaterial;
-                    }
                 }
 
                 _cells.Add(new Cell { cam = cam, rt = rt, model = model.transform });

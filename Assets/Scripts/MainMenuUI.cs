@@ -29,6 +29,10 @@ namespace RollABall
         public Texture2D chibiTexture;
         public Texture2D catTexture;
         public Material catMaterial;
+        [Tooltip("按展位索引的成品材质（null = prefab 原生材质）")]
+        public Material[] cellMaterials;
+        [Tooltip("按展位索引的朝向（度）")]
+        public float[] cellYaw;
 
         private static readonly Color BgColor = new Color(0.12f, 0.15f, 0.20f, 1f);
         private static readonly Color TitleColor = new Color(0.95f, 0.85f, 0.55f);
@@ -65,7 +69,7 @@ namespace RollABall
             if (_previewStage != null) _previewStage.SetVisible(true);
         }
 
-        // 角色列表：三个人形形象各自独占方形展位（独立拖拽旋转），下方按钮选择
+        // 角色列表：每个形象独占方形展位（独立拖拽旋转），数量超出时水平滚动
         private void BuildCharacterPanel()
         {
             var canvas = FindFirstObjectByType<Canvas>();
@@ -77,7 +81,10 @@ namespace RollABall
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f),
                 new Vector2(600f, 80f), new Vector2(0f, -45f));
 
-            // 三个方形展位横排（独立相机渲染 + 独立拖拽旋转）
+            // ---- 角色数据（顺序 = 展位顺序）----
+            string[] ids = { CharacterSelection.ChibiBoy, CharacterSelection.Cat, CharacterSelection.Girl, CharacterSelection.Default };
+            string[] names = { "豆豆男孩", "小猫", "糖糖", "默认模型" };
+
             if (_previewStage == null)
             {
                 var stageGO = new GameObject("CharacterPreviewStage");
@@ -86,21 +93,135 @@ namespace RollABall
                 _previewStage.chibiTexture = chibiTexture;
                 _previewStage.catTexture = catTexture;
                 _previewStage.catMaterial = catMaterial;
+                _previewStage.cellMaterials = cellMaterials;
+                _previewStage.cellYaw = cellYaw;
             }
-            var raws = _previewStage.BuildCells(_characterPanel.transform, new Vector2(380f, 380f));
-            float[] xs = { -425f, 0f, 425f };
-            for (int i = 0; i < raws.Length && i < 3; i++)
-                SetRect((RectTransform)raws[i].transform,
-                    new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                    new Vector2(380f, 380f), new Vector2(xs[i], -45f));
 
-            // 选择按钮对齐各展位下方（当前项打勾）
+            // ---- 网格滚动区：一行 3 个，超出换行，垂直滚动 ----
+            const int columns = 3;
+            const float cellSize = 340f, gap = 35f, buttonH = 60f, rowGap = 50f;
+            float pitch = cellSize + gap;                    // 列间距
+            float rowHeight = cellSize + buttonH + rowGap;    // 行高（展位 + 按钮 + 间隔）
+            int count = Mathf.Min(ids.Length, characterPrefabs != null ? characterPrefabs.Length : 0);
+            int rows = Mathf.CeilToInt(count / (float)columns);
+
+            float contentWidth = gap + columns * pitch;
+            float contentHeight = gap + rows * rowHeight;
+
+            var scrollGO = new GameObject("CharacterScroll", typeof(RectTransform), typeof(ScrollRect));
+            scrollGO.transform.SetParent(_characterPanel.transform, false);
+            var scrollRt = (RectTransform)scrollGO.transform;
+            SetRect(scrollRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(1200f, 530f), new Vector2(0f, -25f));
+            var scroll = scrollGO.GetComponent<ScrollRect>();
+            scroll.horizontal = false;
+            scroll.vertical = true;
+            scroll.movementType = ScrollRect.MovementType.Clamped;
+            scroll.inertia = true;
+            scroll.scrollSensitivity = 40f;
+
+            // Viewport（遮罩）
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D));
+            viewport.transform.SetParent(scrollGO.transform, false);
+            var vpRt = (RectTransform)viewport.transform;
+            vpRt.anchorMin = new Vector2(0f, 0f);
+            vpRt.anchorMax = new Vector2(1f, 1f);
+            vpRt.offsetMin = new Vector2(0f, 0f);
+            vpRt.offsetMax = new Vector2(-20f, 0f);   // 右侧留出滚动条宽度
+            scroll.viewport = vpRt;
+
+            // Content：左上原点，所有子元素统一按 (x, -y) 定位
+            var content = new GameObject("Content", typeof(RectTransform));
+            content.transform.SetParent(viewport.transform, false);
+            var contentRt = (RectTransform)content.transform;
+            contentRt.anchorMin = new Vector2(0f, 1f);
+            contentRt.anchorMax = new Vector2(0f, 1f);
+            contentRt.pivot = new Vector2(0f, 1f);
+            contentRt.sizeDelta = new Vector2(contentWidth, contentHeight);
+            contentRt.anchoredPosition = Vector2.zero;
+            scroll.content = contentRt;
+
+            // 展位（网格排列）
+            var raws = _previewStage.BuildCells(content.transform, new Vector2(cellSize, cellSize));
+            for (int i = 0; i < raws.Length; i++)
+            {
+                int col = i % columns, row = i / columns;
+                float x = gap + col * pitch + cellSize * 0.5f;
+                float y = -(gap + row * rowHeight + cellSize * 0.5f);
+                SetRect((RectTransform)raws[i].transform,
+                    new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0.5f, 0.5f),
+                    new Vector2(cellSize, cellSize), new Vector2(x, y));
+            }
+
+            // 选择按钮（同一格子正下方，与展位同一坐标系）
             string current = CharacterSelection.Get();
-            AddCharacterButton(font, "豆豆男孩", CharacterSelection.ChibiBoy, current, new Vector2(-425f, -322f));
-            AddCharacterButton(font, "小猫", CharacterSelection.Cat, current, new Vector2(0f, -322f));
-            AddCharacterButton(font, "默认模型", CharacterSelection.Default, current, new Vector2(425f, -322f));
+            for (int i = 0; i < count; i++)
+            {
+                int col = i % columns, row = i / columns;
+                float x = gap + col * pitch + cellSize * 0.5f;
+                float y = -(gap + row * rowHeight + cellSize + 10f + buttonH * 0.5f);
+                CreateCharacterButtonIn(content.transform, font, names[i], ids[i], current, new Vector2(x, y), buttonH);
+            }
+
+            // 垂直滚动条
+            var barGO = new GameObject("Scrollbar", typeof(RectTransform), typeof(Scrollbar));
+            barGO.transform.SetParent(scrollGO.transform, false);
+            var barRt = (RectTransform)barGO.transform;
+            barRt.anchorMin = new Vector2(1f, 0f);
+            barRt.anchorMax = new Vector2(1f, 1f);
+            barRt.pivot = new Vector2(1f, 0.5f);
+            barRt.sizeDelta = new Vector2(16f, 0f);
+            barRt.anchoredPosition = Vector2.zero;
+            var scrollbar = barGO.GetComponent<Scrollbar>();
+            scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+            var barBg = new GameObject("Background", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            barBg.transform.SetParent(barGO.transform, false);
+            var bgRt = (RectTransform)barBg.transform;
+            bgRt.anchorMin = Vector2.zero; bgRt.anchorMax = Vector2.one;
+            bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
+            barBg.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.45f);
+
+            var handleArea = new GameObject("SlidingArea", typeof(RectTransform));
+            handleArea.transform.SetParent(barGO.transform, false);
+            var haRt = (RectTransform)handleArea.transform;
+            haRt.anchorMin = Vector2.zero; haRt.anchorMax = Vector2.one;
+            haRt.offsetMin = new Vector2(3f, 4f); haRt.offsetMax = new Vector2(-3f, -4f);
+
+            var handle = new GameObject("Handle", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+            handle.transform.SetParent(handleArea.transform, false);
+            var hRt = (RectTransform)handle.transform;
+            hRt.anchorMin = Vector2.zero; hRt.anchorMax = Vector2.one;
+            hRt.offsetMin = Vector2.zero; hRt.offsetMax = Vector2.zero;
+            var handleImg = handle.GetComponent<Image>();
+            handleImg.color = new Color(0.85f, 0.85f, 0.85f, 0.9f);
+            scrollbar.handleRect = hRt;
+            scrollbar.targetGraphic = handleImg;
+            scroll.verticalScrollbar = scrollbar;
+            scroll.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
 
             AddButton(_characterPanel.transform, font, "返回主菜单", BackColor, new Vector2(500f, 310f), ShowMenu);
+        }
+
+        /// <summary>在滚动内容里创建角色选择按钮（左上锚点，与展位同一坐标系）。</summary>
+        private void CreateCharacterButtonIn(Transform parent, Font font, string label, string id, string current,
+            Vector2 position, float buttonH)
+        {
+            bool selected = current == id;
+            string text = selected ? $"{label}（当前）" : label;
+            var go = new GameObject($"Btn_{label}", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            var rt = (RectTransform)go.transform;
+            rt.anchorMin = new Vector2(0f, 1f);      // 与展位一致：content 左上原点
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = new Vector2(280f, buttonH);
+            rt.anchoredPosition = position;
+            go.GetComponent<Image>().color = selected ? StartColor : LevelColor;
+            go.GetComponent<Button>().onClick.AddListener(() => { CharacterSelection.Set(id); ShowCharacterSelect(); });
+
+            Text t = CreateText(go.transform, "Text", text, font, 28, FontStyle.Bold, Color.white);
+            SetRect((RectTransform)t.transform, Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
         }
 
         private void AddCharacterButton(Font font, string label, string id, string current, Vector2 position)

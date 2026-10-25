@@ -10,14 +10,16 @@ namespace RollABall
     /// </summary>
     public class PlayerAppearance : MonoBehaviour
     {
-        [Header("三个可选形象")]
+        [Header("可选形象")]
         public GameObject defaultPrefab;   // X Bot
         public GameObject chibiPrefab;     // 豆豆男孩
         public GameObject catPrefab;       // 小猫
+        public GameObject girlPrefab;      // 小女孩
         [Header("贴图（X Bot 用自带材质，无需贴图）")]
         public Texture2D chibiTexture;     // 豆豆男孩 basecolor
         public Texture2D catTexture;       // 小猫 basecolor
         public Material catMaterial;       // 小猫成品材质（带条纹贴图，运行时套用）
+        public Material girlMaterial;      // 小女孩成品材质
         public RuntimeAnimatorController controller;
         public Transform modelPivot;
         public PlayerController player;
@@ -31,6 +33,7 @@ namespace RollABall
 
             GameObject prefab = id == CharacterSelection.ChibiBoy ? chibiPrefab
                               : id == CharacterSelection.Cat ? catPrefab
+                              : id == CharacterSelection.Girl ? girlPrefab
                               : id == CharacterSelection.Default ? defaultPrefab
                               : null;
             if (prefab == null) { Debug.LogWarning($"[PlayerAppearance] 未知名形象 {id}，保留默认"); return; }
@@ -59,13 +62,11 @@ namespace RollABall
 
             // Animator 可能在根或子节点：用 GetComponentInChildren 找
             var anim = model.GetComponentInChildren<Animator>();
-            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;   // 防误剔除冻结
-            Debug.Log($"[PlayerAppearance][诊断] id={id} 根上有Animator={model.GetComponent<Animator>() != null}, " +
-                      $"子树中Animator={(anim != null ? anim.name : "null")}, " +
-                      $"controller={(controller != null ? controller.name : "null")}, " +
-                      $"screen={Screen.width}x{Screen.height}");
+            Debug.Log($"[PlayerAppearance] id={id} 子树中Animator={(anim != null ? anim.name : "null")}, " +
+                      $"controller={(controller != null ? controller.name : "null")}");
             if (anim != null)
             {
+                anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;   // 防误剔除冻结
                 anim.runtimeAnimatorController = controller;
                 anim.applyRootMotion = false;
                 if (player != null) player.animator = anim;
@@ -97,6 +98,11 @@ namespace RollABall
             {
                 foreach (var r in model.GetComponentsInChildren<Renderer>())
                     r.sharedMaterial = catMaterial;   // 条纹猫材质
+            }
+            else if (id == CharacterSelection.Girl && girlMaterial != null)
+            {
+                foreach (var r in model.GetComponentsInChildren<Renderer>())
+                    r.sharedMaterial = girlMaterial;
             }
 
             // 归一化：高度对齐 + 脚底贴地 + XZ 对中
