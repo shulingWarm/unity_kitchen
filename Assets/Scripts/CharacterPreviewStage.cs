@@ -65,7 +65,8 @@ namespace RollABall
                 // 模型（归一化高度、朝向相机、脚底贴 y=0、居中于本展位）
                 var model = Instantiate(prefabs[i], transform);
                 model.name = $"PreviewModel_{i}";
-                model.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+                float yaw = i == 1 ? 0f : 180f;   // 绑骨猫(i=1)原生面向镜头，其余 Mixamo 模型需转 180°
+                model.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 var renderers = model.GetComponentsInChildren<Renderer>();
                 if (renderers.Length > 0)
                 {

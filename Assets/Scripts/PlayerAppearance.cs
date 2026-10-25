@@ -17,6 +17,7 @@ namespace RollABall
         [Header("贴图（X Bot 用自带材质，无需贴图）")]
         public Texture2D chibiTexture;     // 豆豆男孩 basecolor
         public Texture2D catTexture;       // 小猫 basecolor
+        public Material catMaterial;       // 小猫成品材质（带条纹贴图，运行时套用）
         public RuntimeAnimatorController controller;
         public Transform modelPivot;
         public PlayerController player;
@@ -58,6 +59,11 @@ namespace RollABall
 
             // Animator 可能在根或子节点：用 GetComponentInChildren 找
             var anim = model.GetComponentInChildren<Animator>();
+            anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;   // 防误剔除冻结
+            Debug.Log($"[PlayerAppearance][诊断] id={id} 根上有Animator={model.GetComponent<Animator>() != null}, " +
+                      $"子树中Animator={(anim != null ? anim.name : "null")}, " +
+                      $"controller={(controller != null ? controller.name : "null")}, " +
+                      $"screen={Screen.width}x{Screen.height}");
             if (anim != null)
             {
                 anim.runtimeAnimatorController = controller;
@@ -80,12 +86,17 @@ namespace RollABall
                 Debug.Log($"[PlayerAppearance] 角色形象已切换为 {id}（静态模型：程序化动画）");
             }
 
-            // 贴图接线：仅豆豆男孩需要（小猫 GLB/OBJ 自带 MTL 贴图，X Bot 用原生材质）
+            // 材质接线：运行时实例拿的是 prefab 默认材质（无贴图），必须重新套成品材质
             if (id == CharacterSelection.ChibiBoy && chibiTexture != null)
             {
                 var mat = new Material(Shader.Find("Standard")) { mainTexture = chibiTexture };
                 foreach (var r in model.GetComponentsInChildren<Renderer>())
                     r.sharedMaterial = mat;
+            }
+            else if (id == CharacterSelection.Cat && catMaterial != null)
+            {
+                foreach (var r in model.GetComponentsInChildren<Renderer>())
+                    r.sharedMaterial = catMaterial;   // 条纹猫材质
             }
 
             // 归一化：高度对齐 + 脚底贴地 + XZ 对中
@@ -118,6 +129,22 @@ namespace RollABall
                 mouth.transform.position = new Vector3(tb.center.x, tb.min.y + tb.size.y * 0.72f, tb.max.z + 0.03f);
                 if (player != null) player.mouthAnchor = mouth.transform;
             }
+
+            // 诊断：1 秒后输出 Animator 实际播放状态
+            if (anim != null)
+                StartCoroutine(DiagnoseAnimator(anim, id));
+        }
+
+        private System.Collections.IEnumerator DiagnoseAnimator(Animator anim, string id)
+        {
+            yield return new WaitForSeconds(1f);
+            var st = anim.GetCurrentAnimatorStateInfo(0);
+            Debug.Log($"[PlayerAppearance][诊断] {id}: enabled={anim.enabled}, isActiveAndEnabled={anim.isActiveAndEnabled}, " +
+                      $"controller={(anim.runtimeAnimatorController != null ? anim.runtimeAnimatorController.name : "NULL")}, " +
+                      $"avatar={(anim.avatar != null ? anim.avatar.name : "NULL")}, avatarValid={((anim.avatar != null) && anim.avatar.isValid)}, " +
+                      $"parameterCount={anim.parameterCount}, currentStateHash={st.shortNameHash}, length={st.length:F2}, " +
+                      $"speed={anim.speed}, playableCount={((anim.playableGraph.IsValid()) ? anim.playableGraph.GetPlayableCount() : -1)}, " +
+                      $"cullingMode={anim.cullingMode}");
         }
     }
 }

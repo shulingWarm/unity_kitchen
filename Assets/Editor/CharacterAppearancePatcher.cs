@@ -15,7 +15,7 @@ namespace RollABallEditorTools
         private const string ScenePath = "Assets/Scenes/DemoScene.unity";
         private const string DefaultFbxPath = "Assets/Models/X Bot.fbx";
         private const string ChibiFbxPath = "Assets/Models/ChibiBoy/ChibiBoy.fbx";
-        private const string CatGlbPath = "Assets/Models/Cat/CuteCat.glb";
+        private const string CatRiggedPath = "Assets/Models/Cat/CatRigged2.fbx";
         private const string AnimatorControllerPath = "Assets/Animations/PlayerAnimator.controller";
 
         [MenuItem("Tools/Roll-a-Ball/12 - 注入角色选择外观组件")]
@@ -44,7 +44,7 @@ namespace RollABallEditorTools
                 menuUi.characterPrefabs = new[]
                 {
                     AssetDatabase.LoadAssetAtPath<GameObject>(ChibiFbxPath),
-                    AssetDatabase.LoadAssetAtPath<GameObject>(CatGlbPath),
+                    AssetDatabase.LoadAssetAtPath<GameObject>(CatRiggedPath),
                     AssetDatabase.LoadAssetAtPath<GameObject>(DefaultFbxPath),
                 };
                 menuUi.chibiTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/ChibiBoy/chibi_boy_basecolor.png");
@@ -67,9 +67,9 @@ namespace RollABallEditorTools
         {
             appearance.defaultPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultFbxPath);
             appearance.chibiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ChibiFbxPath);
-            appearance.catPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CatGlbPath);
+            appearance.catPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CatRiggedPath);
             appearance.chibiTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/ChibiBoy/chibi_boy_basecolor.png");
-            appearance.catTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/Cat/cute_cat_basecolor.png");
+            appearance.catMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/Models/Cat/CatRiggedMat.mat");
             appearance.controller = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(AnimatorControllerPath);
             appearance.modelPivot = pc.modelPivot;
             appearance.player = pc;
