@@ -16,12 +16,14 @@ namespace RollABall
         public GameObject catPrefab;       // 小猫
         public GameObject girlPrefab;      // 小女孩
         public GameObject xiaokePrefab;    // 小科
+        public GameObject mousePrefab;     // 小老鼠
         [Header("贴图（X Bot 用自带材质，无需贴图）")]
         public Texture2D chibiTexture;     // 豆豆男孩 basecolor
         public Texture2D catTexture;       // 小猫 basecolor
         public Material catMaterial;       // 小猫成品材质（带条纹贴图，运行时套用）
         public Material girlMaterial;      // 小女孩成品材质
         public Material xiaokeMaterial;    // 小科成品材质
+        public Material mouseMaterial;     // 小老鼠成品材质
         public RuntimeAnimatorController controller;
         public Transform modelPivot;
         public PlayerController player;
@@ -37,6 +39,7 @@ namespace RollABall
                               : id == CharacterSelection.Cat ? catPrefab
                               : id == CharacterSelection.Girl ? girlPrefab
                               : id == CharacterSelection.Xiaoke ? xiaokePrefab
+                              : id == CharacterSelection.Mouse ? mousePrefab
                               : id == CharacterSelection.Default ? defaultPrefab
                               : null;
             if (prefab == null) { Debug.LogWarning($"[PlayerAppearance] 未知名形象 {id}，保留默认"); return; }
@@ -111,6 +114,11 @@ namespace RollABall
             {
                 foreach (var r in model.GetComponentsInChildren<Renderer>())
                     r.sharedMaterial = xiaokeMaterial;
+            }
+            else if (id == CharacterSelection.Mouse && mouseMaterial != null)
+            {
+                foreach (var r in model.GetComponentsInChildren<Renderer>())
+                    r.sharedMaterial = mouseMaterial;
             }
 
             // 归一化：高度对齐 + 脚底贴地 + XZ 对中

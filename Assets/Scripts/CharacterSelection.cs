@@ -9,6 +9,7 @@ namespace RollABall
         public const string Cat = "Cat";
         public const string Girl = "Girl";
         public const string Xiaoke = "Xiaoke";
+        public const string Mouse = "Mouse";
         public const string Default = "Default";   // X Bot
 
         private const string PrefKey = "SelectedCharacter";

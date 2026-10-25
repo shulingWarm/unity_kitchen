@@ -94,8 +94,8 @@ namespace RollABall
                 new Vector2(600f, 80f), new Vector2(0f, -45f));
 
             // ---- 角色数据（顺序 = 展位顺序）----
-            string[] ids = { CharacterSelection.ChibiBoy, CharacterSelection.Cat, CharacterSelection.Girl, CharacterSelection.Xiaoke, CharacterSelection.Default };
-            string[] names = { "豆豆男孩", "小猫", "糖糖", "小科", "默认模型" };
+            string[] ids = { CharacterSelection.ChibiBoy, CharacterSelection.Cat, CharacterSelection.Girl, CharacterSelection.Xiaoke, CharacterSelection.Mouse, CharacterSelection.Default };
+            string[] names = { "豆豆男孩", "小猫", "糖糖", "小科", "小老鼠", "默认模型" };
 
             if (_previewStage == null)
             {
