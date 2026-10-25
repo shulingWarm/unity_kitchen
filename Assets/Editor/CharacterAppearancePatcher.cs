@@ -48,7 +48,7 @@ namespace RollABallEditorTools
                     AssetDatabase.LoadAssetAtPath<GameObject>(DefaultFbxPath),
                 };
                 menuUi.chibiTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/ChibiBoy/chibi_boy_basecolor.png");
-                menuUi.catTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/Cat/cute_cat_basecolor.png");
+                menuUi.catMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/Models/Cat/CatRiggedMat.mat");
                 EditorSceneManager.MarkSceneDirty(menuScene);
                 EditorSceneManager.SaveScene(menuScene);
                 Debug.Log("[CharacterAppearancePatcher] 主菜单 characterPrefabs 已注入");

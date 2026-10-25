@@ -1295,7 +1295,7 @@ MonoBehaviour:
   controller: {fileID: 9100000, guid: f8000168e6b13fe4293cb1b2c76f3ef7, type: 2}
   modelPivot: {fileID: 1283969372}
   player: {fileID: 1111126101}
-  defaultModel: {fileID: 0}
+  defaultModel: {fileID: 705289049}
 --- !u!1 &1161680107
 GameObject:
   m_ObjectHideFlags: 0

@@ -28,6 +28,7 @@ namespace RollABall
         [Tooltip("候选形象贴图（菜单 12 注入）")]
         public Texture2D chibiTexture;
         public Texture2D catTexture;
+        public Material catMaterial;
 
         private static readonly Color BgColor = new Color(0.12f, 0.15f, 0.20f, 1f);
         private static readonly Color TitleColor = new Color(0.95f, 0.85f, 0.55f);
@@ -84,6 +85,7 @@ namespace RollABall
                 _previewStage.prefabs = characterPrefabs;
                 _previewStage.chibiTexture = chibiTexture;
                 _previewStage.catTexture = catTexture;
+                _previewStage.catMaterial = catMaterial;
             }
             var raws = _previewStage.BuildCells(_characterPanel.transform, new Vector2(380f, 380f));
             float[] xs = { -425f, 0f, 425f };

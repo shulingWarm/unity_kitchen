@@ -16,6 +16,7 @@ namespace RollABall
         public float modelHeight = 1.5f;         // 展示高度（米）
         public Texture2D chibiTexture;           // 豆豆男孩 basecolor
         public Texture2D catTexture;             // 小猫 basecolor
+        public Material catMaterial;             // 小猫成品材质（条纹贴图）
 
         private class Cell
         {
@@ -80,12 +81,15 @@ namespace RollABall
                     }
                     model.transform.position += new Vector3(originX - b.center.x, -b.min.y, -b.center.z);
 
-                    // 贴图接线：豆豆男孩需要补 basecolor；小猫（OBJ）自带 MTL 贴图；默认模型用原生材质
-                    Texture2D tex = i == 0 ? chibiTexture : null;
-                    if (tex != null)
+                    // 材质接线：豆豆男孩补 basecolor；小猫套成品材质（prefab 原生材质无贴图）；默认模型用原生材质
+                    if (i == 0 && chibiTexture != null)
                     {
-                        var mat = new Material(Shader.Find("Standard")) { mainTexture = tex };
+                        var mat = new Material(Shader.Find("Standard")) { mainTexture = chibiTexture };
                         foreach (var r in renderers) r.sharedMaterial = mat;
+                    }
+                    else if (i == 1 && catMaterial != null)
+                    {
+                        foreach (var r in renderers) r.sharedMaterial = catMaterial;
                     }
                 }
 
