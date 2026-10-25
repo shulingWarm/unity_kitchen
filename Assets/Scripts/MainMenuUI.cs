@@ -22,6 +22,7 @@ namespace RollABall
         private GameObject _levelPanel;
         private GameObject _characterPanel;
         private CharacterPreviewStage _previewStage;
+        private ScrollRect _characterScroll;
 
         [Tooltip("候选形象（菜单 12 注入）：顺序对应预览台三个按钮")]
         public GameObject[] characterPrefabs;
@@ -63,10 +64,21 @@ namespace RollABall
         private void ShowCharacterSelect()
         {
             _menuPanel.SetActive(false);
+
+            // 记住滚动位置：选中角色后面板会重建，列表不应跳回顶部
+            Vector2 savedScroll = _characterScroll != null ? _characterScroll.normalizedPosition : new Vector2(0f, 1f);
+
             if (_characterPanel != null) Destroy(_characterPanel);
             BuildCharacterPanel();
             _characterPanel.SetActive(true);
             if (_previewStage != null) _previewStage.SetVisible(true);
+
+            // 恢复滚动位置（先强制布局，否则 normalizedPosition 会被重置）
+            if (_characterScroll != null)
+            {
+                Canvas.ForceUpdateCanvases();
+                _characterScroll.normalizedPosition = savedScroll;
+            }
         }
 
         // 角色列表：每个形象独占方形展位（独立拖拽旋转），数量超出时水平滚动
@@ -114,6 +126,7 @@ namespace RollABall
             SetRect(scrollRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
                 new Vector2(1200f, 530f), new Vector2(0f, -25f));
             var scroll = scrollGO.GetComponent<ScrollRect>();
+            _characterScroll = scroll;
             scroll.horizontal = false;
             scroll.vertical = true;
             scroll.movementType = ScrollRect.MovementType.Clamped;
