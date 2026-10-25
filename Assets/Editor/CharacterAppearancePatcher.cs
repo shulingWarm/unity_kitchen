@@ -17,6 +17,7 @@ namespace RollABallEditorTools
         private const string ChibiFbxPath = "Assets/Models/ChibiBoy/ChibiBoy.fbx";
         private const string CatRiggedPath = "Assets/Models/Cat/CatRigged2.fbx";
         private const string GirlFbxPath = "Assets/Models/Girl/Girl.fbx";
+        private const string XiaokeFbxPath = "Assets/Models/Xiaoke/Xiaoke.fbx";
         private const string AnimatorControllerPath = "Assets/Animations/PlayerAnimator.controller";
 
         [MenuItem("Tools/Roll-a-Ball/12 - 注入角色选择外观组件")]
@@ -26,6 +27,7 @@ namespace RollABallEditorTools
 
             // 所有可选形象都必须是 Humanoid 导入（否则没有 Avatar → 运行时无 Animator → 不播动画）
             EnsureHumanoidImport(GirlFbxPath);
+            EnsureHumanoidImport(XiaokeFbxPath);
 
             var pc = Object.FindFirstObjectByType<PlayerController>();
             if (pc == null) { Debug.LogError("[CharacterAppearancePatcher] 场景中没有 PlayerController"); return; }
@@ -48,11 +50,13 @@ namespace RollABallEditorTools
                 var chibiMatPath = EnsureChibiMaterial();
                 var catMatPath = "Assets/Models/Cat/CatRiggedMat.mat";
                 var girlMatPath = EnsureGirlMaterial();
+                var xiaokeMatPath = EnsureXiaokeMaterial();
                 menuUi.characterPrefabs = new[]
                 {
                     AssetDatabase.LoadAssetAtPath<GameObject>(ChibiFbxPath),
                     AssetDatabase.LoadAssetAtPath<GameObject>(CatRiggedPath),
                     AssetDatabase.LoadAssetAtPath<GameObject>(GirlFbxPath),
+                    AssetDatabase.LoadAssetAtPath<GameObject>(XiaokeFbxPath),
                     AssetDatabase.LoadAssetAtPath<GameObject>(DefaultFbxPath),
                 };
                 menuUi.chibiTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/ChibiBoy/chibi_boy_basecolor.png");
@@ -62,9 +66,10 @@ namespace RollABallEditorTools
                     AssetDatabase.LoadAssetAtPath<Material>(chibiMatPath),
                     AssetDatabase.LoadAssetAtPath<Material>(catMatPath),
                     AssetDatabase.LoadAssetAtPath<Material>(girlMatPath),
+                    AssetDatabase.LoadAssetAtPath<Material>(xiaokeMatPath),
                     null,   // X Bot 用原生材质
                 };
-                menuUi.cellYaw = new[] { 180f, 0f, 0f, 180f };   // 各模型原生朝向校正
+                menuUi.cellYaw = new[] { 180f, 0f, 0f, 0f, 180f };   // 各模型原生朝向校正
                 EditorSceneManager.MarkSceneDirty(menuScene);
                 EditorSceneManager.SaveScene(menuScene);
                 Debug.Log("[CharacterAppearancePatcher] 主菜单 characterPrefabs 已注入");
@@ -85,9 +90,11 @@ namespace RollABallEditorTools
             appearance.chibiPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ChibiFbxPath);
             appearance.catPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CatRiggedPath);
             appearance.girlPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(GirlFbxPath);
+            appearance.xiaokePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(XiaokeFbxPath);
             appearance.chibiTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Models/ChibiBoy/chibi_boy_basecolor.png");
             appearance.catMaterial = AssetDatabase.LoadAssetAtPath<Material>("Assets/Models/Cat/CatRiggedMat.mat");
             appearance.girlMaterial = AssetDatabase.LoadAssetAtPath<Material>(EnsureGirlMaterial());
+            appearance.xiaokeMaterial = AssetDatabase.LoadAssetAtPath<Material>(EnsureXiaokeMaterial());
             appearance.controller = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(AnimatorControllerPath);
             appearance.modelPivot = pc.modelPivot;
             appearance.player = pc;
@@ -124,6 +131,25 @@ namespace RollABallEditorTools
             EditorUtility.SetDirty(mat);
             AssetDatabase.SaveAssets();
             Debug.Log($"[CharacterAppearancePatcher] 小女孩材质贴图: {(tex != null ? tex.name : "无")}");
+            return path;
+        }
+
+        /// <summary>小科成品材质（贴图从 FBX 内嵌提取：Assets/Textures/xiaoke_tex0.png）。</summary>
+        private static string EnsureXiaokeMaterial()
+        {
+            const string path = "Assets/Models/Xiaoke/XiaokeMat.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (mat == null)
+            {
+                mat = new Material(Shader.Find("Standard"));
+                AssetDatabase.CreateAsset(mat, path);
+            }
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>("Assets/Textures/xiaoke_tex0.png");
+            if (tex != null) mat.mainTexture = tex;
+            mat.color = Color.white;
+            EditorUtility.SetDirty(mat);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[CharacterAppearancePatcher] 小科材质贴图: {(tex != null ? tex.name : "无")}");
             return path;
         }
 
